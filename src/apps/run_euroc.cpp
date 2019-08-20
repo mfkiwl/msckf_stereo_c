@@ -10,11 +10,15 @@
 
 #include <Eigen/Core>
 
+#include "image_processor.h"
+
 // params
 std::string euroc_dir = "/home/cg/projects/datasets/MH_01_easy/mav0/";
 int num_cams = 2;
 
 std::vector<std::vector<std::pair<double,std::string>>> data_img(num_cams);
+
+mynt::ImageProcessorPtr imgproc_ptr;
 
 void process_image_data() {
     static bool is_init = false;
@@ -41,23 +45,26 @@ void process_image_data() {
         is_init = true;
     }
     for (int i = 0; i < data_img[0].size(); ++i) {
-        cv::Mat imgs[num_cams];
+        mynt::Image imgs[num_cams];
         for(int j=0; j<num_cams; ++j) {
+            imgs[j].time_stamp = data_img[j][i].first*1e-9; // to seconds;
             std::string img_path = euroc_dir + "/cam" + std::to_string(j) + "/data/" + data_img[j][i].second;
-            imgs[j] = cv::imread(img_path, 0);
-            if (imgs[j].empty()) {
+            imgs[j].image = cv::imread(img_path, 0);
+            if (imgs[j].image.empty()) {
                 std::cerr << "ERROR: img is empty !!!" << std::endl;
                 continue;
             }
-            cv::imshow("cam"+std::to_string(j), imgs[j]);
-            cv::waitKey(20);
+            // cv::imshow("cam"+std::to_string(j), imgs[j].image);
+            // cv::waitKey(20);
         }
+
+        imgproc_ptr->stereoCallback(imgs[0], imgs[1]);
+
         usleep(30000);
     }
 }
 
 void process_imu_data() {
-    std::vector<std::pair<double,std::pair<Eigen::Vector3d,Eigen::Vector3d>>> data_imu;
     std::ifstream imu_file(euroc_dir + "/imu0/data.csv");
     if (!imu_file.good()) {
         std::cerr << "ERROR: no imu file found !!!" << std::endl;
@@ -80,8 +87,15 @@ void process_imu_data() {
             std::getline(stream, s, ',');
             acc[j] = std::stof(s);
         }
-        std::cout << "imu: " << gyr.transpose() << ", " << gyr.transpose() << std::endl;
-        data_imu.push_back(std::make_pair(stamp_ns, std::make_pair(gyr,acc)));
+        // std::cout << "imu: " << gyr.transpose() << ", " << acc.transpose() << std::endl;
+
+        mynt::Imu imu;
+        imu.time_stamp = stamp_ns*1e-9; // to seconds
+        imu.angular_velocity = gyr;
+        imu.linear_acceleration = acc;
+
+        imgproc_ptr->imuCallback(imu);
+
         usleep(5000*2);
     }
     imu_file.close();
@@ -89,6 +103,12 @@ void process_imu_data() {
 
 int main() {
     std::cout << "start run_euroc..." << std::endl;
+
+    imgproc_ptr.reset(new mynt::ImageProcessor);
+    if (!imgproc_ptr->initialize()) {
+        std::cerr << "Cannot initialize Image Processor..." << std::endl;
+        return -1;
+    }
 
     std::thread thd_image_data(process_image_data);
     std::thread thd_imu_data(process_imu_data);

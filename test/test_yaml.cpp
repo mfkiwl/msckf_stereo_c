@@ -1,6 +1,7 @@
-#include "utils/config_io.h"
+#include "config_io.h"
 
 #include <gtest/gtest.h>
+#include <opencv2/core.hpp>
 
 
 TEST(ConfigIO, basis) {
@@ -15,5 +16,9 @@ TEST(ConfigIO, basis) {
     std::cout << "cam0 distortion_coeffs: " << v4.transpose() << std::endl;
     std::cout << "cam0 distortion_model: " << cam_model << std::endl;
     std::cout << "cam0 resolution: " << v2.transpose() << std::endl;
+
+    cv::Mat mat(4,4,CV_64FC1);
+    memcpy(mat.data, m4.data(), sizeof(double)*16);
+    std::cout << "cv mat: \n" << mat << std::endl;
 }
 
