@@ -1,0 +1,26 @@
+# Msckf Vio
+frame_rate: 20
+max_cam_state_size: 20
+position_std_threshold: 8.0
+rotation_threshold: 0.2618
+translation_threshold: 0.4
+tracking_rate_threshold: 0.5
+
+# Feature optimization config
+feature/config/translation_threshold: -1.0
+
+# standard deviation
+noise/gyro: 0.005
+noise/acc: 0.05
+noise/gyro_bias: 0.001
+noise/acc_bias: 0.01
+noise/feature: 0.035
+
+initial_state/velocity: [0.0, 0.0, 0.0]
+
+# covariance
+initial_covariance/velocity: 0.25
+initial_covariance/gyro_bias: 0.01
+initial_covariance/acc_bias: 0.01
+initial_covariance/extrinsic_rotation_cov: 3.0462e-4
+initial_covariance/extrinsic_translation_cov: 2.5e-5

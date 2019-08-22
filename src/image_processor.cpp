@@ -13,7 +13,6 @@
 
 #include <Eigen/Dense>
 
-#include "config_io.h"
 #include "random_numbers.h"
 
 using namespace std;
@@ -22,7 +21,9 @@ using namespace Eigen;
 
 namespace mynt {
 
-    ImageProcessor::ImageProcessor() :
+    ImageProcessor::ImageProcessor(YAML::Node cfg_cam_imu) :
+            cfg_cam_imu_(cfg_cam_imu),
+            feature_msg_ptr_(new CameraMeasurement),
             is_first_img(true),
             cam0_prev_img_ptr(new mynt::Image),
             cam0_curr_img_ptr(new mynt::Image),
@@ -41,55 +42,53 @@ namespace mynt {
 
     bool ImageProcessor::loadParameters() {
         // Camera calibration parameters
-        YAML::Node cfg_cam_imu = YAML::LoadFile("../config/camchain-imucam-euroc.yaml");
+        cam0_distortion_model = cfg_cam_imu_["cam0"]["distortion_model"].as<std::string>();
+        cam1_distortion_model = cfg_cam_imu_["cam1"]["distortion_model"].as<std::string>();
 
-        cam0_distortion_model = cfg_cam_imu["cam0"]["distortion_model"].as<std::string>();
-        cam1_distortion_model = cfg_cam_imu["cam1"]["distortion_model"].as<std::string>();
-
-        Eigen::Vector2d cam0_resolution_temp = cfg_cam_imu["cam0"]["resolution"].as<Eigen::Vector2d>();
+        Eigen::Vector2d cam0_resolution_temp = cfg_cam_imu_["cam0"]["resolution"].as<Eigen::Vector2d>();
         cam0_resolution[0] = cam0_resolution_temp[0];
         cam0_resolution[1] = cam0_resolution_temp[1];
 
-        Eigen::Vector2d cam1_resolution_temp = cfg_cam_imu["cam1"]["resolution"].as<Eigen::Vector2d>();
+        Eigen::Vector2d cam1_resolution_temp = cfg_cam_imu_["cam1"]["resolution"].as<Eigen::Vector2d>();
         cam1_resolution[0] = cam1_resolution_temp[0];
         cam1_resolution[1] = cam1_resolution_temp[1];
 
-        Eigen::Vector4d cam0_intrinsics_temp = cfg_cam_imu["cam0"]["intrinsics"].as<Eigen::Vector4d>();
+        Eigen::Vector4d cam0_intrinsics_temp = cfg_cam_imu_["cam0"]["intrinsics"].as<Eigen::Vector4d>();
         cam0_intrinsics[0] = cam0_intrinsics_temp[0];
         cam0_intrinsics[1] = cam0_intrinsics_temp[1];
         cam0_intrinsics[2] = cam0_intrinsics_temp[2];
         cam0_intrinsics[3] = cam0_intrinsics_temp[3];
 
-        Eigen::Vector4d cam1_intrinsics_temp = cfg_cam_imu["cam1"]["intrinsics"].as<Eigen::Vector4d>();
+        Eigen::Vector4d cam1_intrinsics_temp = cfg_cam_imu_["cam1"]["intrinsics"].as<Eigen::Vector4d>();
         cam1_intrinsics[0] = cam1_intrinsics_temp[0];
         cam1_intrinsics[1] = cam1_intrinsics_temp[1];
         cam1_intrinsics[2] = cam1_intrinsics_temp[2];
         cam1_intrinsics[3] = cam1_intrinsics_temp[3];
 
-        Eigen::Vector4d cam0_distortion_coeffs_temp = cfg_cam_imu["cam0"]["distortion_coeffs"].as<Eigen::Vector4d>();
+        Eigen::Vector4d cam0_distortion_coeffs_temp = cfg_cam_imu_["cam0"]["distortion_coeffs"].as<Eigen::Vector4d>();
         cam0_distortion_coeffs[0] = cam0_distortion_coeffs_temp[0];
         cam0_distortion_coeffs[1] = cam0_distortion_coeffs_temp[1];
         cam0_distortion_coeffs[2] = cam0_distortion_coeffs_temp[2];
         cam0_distortion_coeffs[3] = cam0_distortion_coeffs_temp[3];
 
-        Eigen::Vector4d cam1_distortion_coeffs_temp = cfg_cam_imu["cam0"]["distortion_coeffs"].as<Eigen::Vector4d>();
+        Eigen::Vector4d cam1_distortion_coeffs_temp = cfg_cam_imu_["cam0"]["distortion_coeffs"].as<Eigen::Vector4d>();
         cam1_distortion_coeffs[0] = cam1_distortion_coeffs_temp[0];
         cam1_distortion_coeffs[1] = cam1_distortion_coeffs_temp[1];
         cam1_distortion_coeffs[2] = cam1_distortion_coeffs_temp[2];
         cam1_distortion_coeffs[3] = cam1_distortion_coeffs_temp[3];
 
-        Eigen::Matrix4d T_cam0_imu = cfg_cam_imu["cam0"]["T_cam_imu"].as<Eigen::Matrix4d>();
+        Eigen::Matrix4d m4_cam0_imu = cfg_cam_imu_["cam0"]["T_cam_imu"].as<Eigen::Matrix4d>();
         cv::Mat T_imu_cam0(4, 4, CV_64FC1); // 坐标系变换
-        memcpy(T_imu_cam0.data, T_cam0_imu.data(), sizeof(double) * 16);
+        memcpy(T_imu_cam0.data, m4_cam0_imu.data(), sizeof(double) * 16);
 
         cv::Matx33d R_imu_cam0(T_imu_cam0(cv::Rect(0, 0, 3, 3)));
         cv::Vec3d t_imu_cam0 = T_imu_cam0(cv::Rect(3, 0, 1, 3));
         R_cam0_imu = R_imu_cam0.t();
         t_cam0_imu = -R_imu_cam0.t() * t_imu_cam0;
 
-        Eigen::Matrix4d T_cam1_cam0 = cfg_cam_imu["cam1"]["T_cn_cnm1"].as<Eigen::Matrix4d>();
+        Eigen::Matrix4d m4_cam1_cam0 = cfg_cam_imu_["cam1"]["T_cn_cnm1"].as<Eigen::Matrix4d>();
         cv::Mat T_cam0_cam1(4, 4, CV_64FC1); // 坐标系变换
-        memcpy(T_cam0_cam1.data, T_cam1_cam0.data(), sizeof(double) * 16);
+        memcpy(T_cam0_cam1.data, m4_cam1_cam0.data(), sizeof(double) * 16);
 
         cv::Mat T_imu_cam1 = T_cam0_cam1 * T_imu_cam0; // 右乘
         cv::Matx33d R_imu_cam1(T_imu_cam1(cv::Rect(0, 0, 3, 3)));
@@ -148,6 +147,9 @@ namespace mynt {
 
     void ImageProcessor::stereoCallback(const mynt::Image &cam0_img, const mynt::Image &cam1_img) {
         // Get the current image.
+        cam0_curr_img_ptr->time_stamp = cam0_img.time_stamp;
+        cam1_curr_img_ptr->time_stamp = cam1_img.time_stamp;
+
         cam0_curr_img_ptr->image = cam0_img.image.clone();
         cam1_curr_img_ptr->image = cam1_img.image.clone();
 
@@ -190,7 +192,7 @@ namespace mynt {
         return;
     }
 
-    void ImageProcessor::imuCallback(const mynt::Imu &msg) {
+    void ImageProcessor::imuCallback(const mynt::ImuConstPtr &msg) {
         // Wait for the first image to be set.
         if (is_first_img)
             return;
@@ -816,7 +818,7 @@ namespace mynt {
         // Find the start and the end limit within the imu msg buffer.
         auto begin_iter = imu_msg_buffer.begin();
         while (begin_iter != imu_msg_buffer.end()) {
-            if (begin_iter->time_stamp - cam0_prev_img_ptr->time_stamp < -0.01)
+            if ((*begin_iter)->time_stamp - cam0_prev_img_ptr->time_stamp < -0.01)
                 ++begin_iter;
             else
                 break;
@@ -824,7 +826,7 @@ namespace mynt {
 
         auto end_iter = begin_iter;
         while (end_iter != imu_msg_buffer.end()) {
-            if (end_iter->time_stamp - cam0_curr_img_ptr->time_stamp < 0.005)
+            if ((*end_iter)->time_stamp - cam0_curr_img_ptr->time_stamp < 0.005)
                 ++end_iter;
             else
                 break;
@@ -833,8 +835,8 @@ namespace mynt {
         // Compute the mean angular velocity in the IMU frame.
         Vec3f mean_ang_vel(0.0, 0.0, 0.0);
         for (auto iter = begin_iter; iter < end_iter; ++iter)
-            mean_ang_vel += Vec3f(iter->angular_velocity[0],
-                                  iter->angular_velocity[1], iter->angular_velocity[2]);
+            mean_ang_vel += Vec3f((*iter)->angular_velocity[0],
+                                  (*iter)->angular_velocity[1], (*iter)->angular_velocity[2]);
 
         if (end_iter - begin_iter > 0)
             mean_ang_vel *= 1.0f / (end_iter - begin_iter);
@@ -1124,8 +1126,7 @@ namespace mynt {
 
     void ImageProcessor::publish() {
         // Publish features.
-        boost::shared_ptr<CameraMeasurement> feature_msg_ptr(new CameraMeasurement);
-        feature_msg_ptr->time_stamp = cam0_curr_img_ptr->time_stamp;
+        feature_msg_ptr_->time_stamp = cam0_curr_img_ptr->time_stamp;
 
         vector<FeatureIDType> curr_ids(0);
         vector<Point2f> curr_cam0_points(0);
@@ -1150,12 +1151,12 @@ namespace mynt {
                 cam1_distortion_coeffs, curr_cam1_points_undistorted);
 
         for (int i = 0; i < curr_ids.size(); ++i) {
-            feature_msg_ptr->features.push_back(FeatureMeasurement());
-            feature_msg_ptr->features[i].id = curr_ids[i];
-            feature_msg_ptr->features[i].u0 = curr_cam0_points_undistorted[i].x;
-            feature_msg_ptr->features[i].v0 = curr_cam0_points_undistorted[i].y;
-            feature_msg_ptr->features[i].u1 = curr_cam1_points_undistorted[i].x;
-            feature_msg_ptr->features[i].v1 = curr_cam1_points_undistorted[i].y;
+            feature_msg_ptr_->features.push_back(FeatureMeasurement());
+            feature_msg_ptr_->features[i].id = curr_ids[i];
+            feature_msg_ptr_->features[i].u0 = curr_cam0_points_undistorted[i].x;
+            feature_msg_ptr_->features[i].v0 = curr_cam0_points_undistorted[i].y;
+            feature_msg_ptr_->features[i].u1 = curr_cam1_points_undistorted[i].x;
+            feature_msg_ptr_->features[i].v1 = curr_cam1_points_undistorted[i].y;
         }
 
         // TODO

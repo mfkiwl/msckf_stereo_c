@@ -10,12 +10,12 @@
 
 #include <vector>
 #include <map>
-#include <boost/shared_ptr.hpp>
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/video.hpp>
 
 #include "common.h"
+#include "config_io.h"
 
 namespace mynt {
 
@@ -26,7 +26,7 @@ namespace mynt {
     class ImageProcessor {
     public:
         // Constructor
-        ImageProcessor();
+        ImageProcessor(YAML::Node cfg_cam_imu);
 
         // Disable copy and assign constructors.
         ImageProcessor(const ImageProcessor &) = delete;
@@ -52,7 +52,9 @@ namespace mynt {
          *    Callback function for the imu message.
          * @param msg IMU msg.
          */
-        void imuCallback(const mynt::Imu &msg);
+        void imuCallback(const mynt::ImuConstPtr &msg);
+
+        boost::shared_ptr<CameraMeasurement> feature_msg_ptr_;
 
         typedef boost::shared_ptr<ImageProcessor> Ptr;
         typedef boost::shared_ptr<const ImageProcessor> ConstPtr;
@@ -318,6 +320,8 @@ namespace mynt {
             return;
         }
 
+        YAML::Node cfg_cam_imu_;
+
         // Indicate if this is the first image message.
         bool is_first_img;
 
@@ -329,7 +333,7 @@ namespace mynt {
         cv::Ptr<cv::Feature2D> detector_ptr;
 
         // IMU message buffer.
-        std::vector<mynt::Imu> imu_msg_buffer;
+        std::vector<mynt::ImuConstPtr> imu_msg_buffer;
 
         // Camera calibration parameters
         std::string cam0_distortion_model;

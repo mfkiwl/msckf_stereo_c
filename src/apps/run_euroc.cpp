@@ -10,7 +10,7 @@
 
 #include <Eigen/Core>
 
-#include "image_processor.h"
+#include "system.h"
 
 // params
 std::string euroc_dir = "/home/cg/projects/datasets/MH_01_easy/mav0/";
@@ -18,7 +18,7 @@ int num_cams = 2;
 
 std::vector<std::vector<std::pair<double,std::string>>> data_img(num_cams);
 
-mynt::ImageProcessorPtr imgproc_ptr;
+mynt::SystemPtr system_ptr;
 
 void process_image_data() {
     static bool is_init = false;
@@ -35,7 +35,9 @@ void process_image_data() {
                 std::stringstream stream(line);
                 std::string s;
                 std::getline(stream, s, ',');
-                double stamp_ns = std::stof(s);
+                std::string nanoseconds = s.substr(s.size() - 9, 9);
+                std::string seconds = s.substr(0, s.size() - 9);
+                double stamp_ns = std::stoi(seconds) * 1e9 + std::stoi(nanoseconds);
                 std::getline(stream, s, ',');
                 std::string imgname = s.substr(0, s.size()-1);
                 data_img[n].push_back(std::make_pair(stamp_ns, imgname));
@@ -44,7 +46,8 @@ void process_image_data() {
         }
         is_init = true;
     }
-    for (int i = 0; i < data_img[0].size(); ++i) {
+    int i = 0;
+    while(i < data_img[0].size()) {
         mynt::Image imgs[num_cams];
         for(int j=0; j<num_cams; ++j) {
             imgs[j].time_stamp = data_img[j][i].first*1e-9; // to seconds;
@@ -58,9 +61,11 @@ void process_image_data() {
             // cv::waitKey(20);
         }
 
-        imgproc_ptr->stereoCallback(imgs[0], imgs[1]);
+        system_ptr->stereo_callback(imgs[0], imgs[1]);
 
         usleep(30000);
+
+        ++i;
     }
 }
 
@@ -76,7 +81,9 @@ void process_imu_data() {
         std::stringstream stream(line);
         std::string s;
         std::getline(stream, s, ',');
-        double stamp_ns = std::stof(s);
+        std::string nanoseconds = s.substr(s.size() - 9, 9);
+        std::string seconds = s.substr(0, s.size() - 9);
+        double stamp_ns = std::stoi(seconds) * 1e9 + std::stoi(nanoseconds);
         Eigen::Vector3d gyr;
         for (int j = 0; j < 3; ++j) {
             std::getline(stream, s, ',');
@@ -89,12 +96,12 @@ void process_imu_data() {
         }
         // std::cout << "imu: " << gyr.transpose() << ", " << acc.transpose() << std::endl;
 
-        mynt::Imu imu;
-        imu.time_stamp = stamp_ns*1e-9; // to seconds
-        imu.angular_velocity = gyr;
-        imu.linear_acceleration = acc;
+        boost::shared_ptr<mynt::Imu> imu(new mynt::Imu);
+        imu->time_stamp = stamp_ns*1e-9; // to seconds
+        imu->angular_velocity = gyr;
+        imu->linear_acceleration = acc;
 
-        imgproc_ptr->imuCallback(imu);
+        system_ptr->imu_callback(imu);
 
         usleep(5000*2);
     }
@@ -104,17 +111,17 @@ void process_imu_data() {
 int main() {
     std::cout << "start run_euroc..." << std::endl;
 
-    imgproc_ptr.reset(new mynt::ImageProcessor);
-    if (!imgproc_ptr->initialize()) {
-        std::cerr << "Cannot initialize Image Processor..." << std::endl;
-        return -1;
-    }
+    std::string file_cam_imu = "../config/camchain-imucam-euroc.yaml";
+
+    system_ptr.reset(new mynt::System(file_cam_imu));
 
     std::thread thd_image_data(process_image_data);
     std::thread thd_imu_data(process_imu_data);
+    std::thread thd_backend(&mynt::System::backend_callback, system_ptr);
 
     thd_image_data.join();
     thd_imu_data.join();
+    thd_backend.join();
 
     return 0;
 }
