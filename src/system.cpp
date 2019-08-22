@@ -4,6 +4,9 @@
 
 #include "system.h"
 
+#include <pangolin/pangolin.h>
+using namespace pangolin;
+
 namespace mynt {
 
     System::System(std::string file_cam_imu) :
@@ -35,6 +38,8 @@ namespace mynt {
     System::~System() {
         is_start_backend_ = false;
 
+        pangolin::QuitAll();
+
         msckfvio_ptr_->resetCallback();
     }
 
@@ -56,6 +61,61 @@ namespace mynt {
             msckfvio_ptr_->featureCallback(feature_msg_ptr_);
             mt_feature_.unlock();
             usleep(30000);
+        }
+    }
+
+    void System::draw() {
+        // create pangolin window and plot the trajectory
+        pangolin::CreateWindowAndBind("Trajectory Viewer", 1024, 768);
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        pangolin::OpenGlRenderState s_cam(
+                pangolin::ProjectionMatrix(1024, 768, 500, 500, 512, 384, 0.1, 1000),
+                pangolin::ModelViewLookAt(-5, 0, 15, 7, 0, 0, 1.0, 0.0, 0.0)
+        );
+
+        pangolin::View &d_cam = pangolin::CreateDisplay()
+                .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -1024.0f / 768.0f)
+                .SetHandler(new pangolin::Handler3D(s_cam));
+
+        while (pangolin::ShouldQuit() == false) {
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            d_cam.Activate(s_cam);
+            glClearColor(0.75f, 0.75f, 0.75f, 0.75f);
+            glColor3f(0, 0, 1);
+            pangolin::glDrawAxis(3);
+
+            // draw poses
+            glColor3f(0, 0, 0);
+            glLineWidth(2);
+            glBegin(GL_LINES);
+            std::vector<Eigen::Vector3d> path_to_draw = msckfvio_ptr_->get_path();
+            int nPath_size = path_to_draw.size();
+            for(int i = 0; i < nPath_size-1; ++i)
+            {
+                glVertex3f(path_to_draw[i].x(), path_to_draw[i].y(), path_to_draw[i].z());
+                glVertex3f(path_to_draw[i+1].x(), path_to_draw[i+1].y(), path_to_draw[i+1].z());
+            }
+            glEnd();
+
+//            // points
+//            if (estimator.solver_flag == Estimator::SolverFlag::NON_LINEAR)
+//            {
+//                glPointSize(5);
+//                glBegin(GL_POINTS);
+//                for(int i = 0; i < WINDOW_SIZE+1;++i)
+//                {
+//                    Vector3d p_wi = estimator.Ps[i];
+//                    glColor3f(1, 0, 0);
+//                    glVertex3d(p_wi[0],p_wi[1],p_wi[2]);
+//                }
+//                glEnd();
+//            }
+            pangolin::FinishFrame();
+            usleep(5000);   // sleep 5 ms
         }
     }
 }

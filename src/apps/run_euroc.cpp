@@ -119,9 +119,12 @@ int main() {
     std::thread thd_imu_data(process_imu_data);
     std::thread thd_backend(&mynt::System::backend_callback, system_ptr);
 
+    std::thread thd_draw(&mynt::System::draw, system_ptr);
+
     thd_image_data.join();
     thd_imu_data.join();
     thd_backend.join();
+    thd_draw.join();
 
     return 0;
 }

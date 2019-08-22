@@ -44,6 +44,10 @@ find_package(yaml-cpp REQUIRED)
 include_directories(${YAML_CPP_INCLUDE_DIR})
 link_libraries(${YAML_CPP_LIBRARIES})
 
+find_package(Pangolin REQUIRED)
+include_directories(${Pangolin_INCLUDE_DIRS})
+link_libraries(${Pangolin_LIBRARIES})
+
 set(SRC_LIST src/random_numbers.cpp src/image_processor.cpp src/msckf_vio.cpp src/system.cpp)
 set(LIB_LIST ${OpenCV_LIBS} ${Boost_LIBRARIES} -lpthread)
 

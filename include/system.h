@@ -23,6 +23,8 @@ namespace mynt {
 
         void backend_callback();
 
+        void draw();
+
         typedef boost::shared_ptr<System> Ptr;
         typedef boost::shared_ptr<const System> ConstPtr;
 

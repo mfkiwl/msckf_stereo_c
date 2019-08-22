@@ -74,6 +74,8 @@ class MsckfVio {
      */
     void featureCallback(const CameraMeasurementConstPtr& msg);
 
+    const std::vector<Eigen::Vector3d> get_path() const {return path_;}
+
     typedef boost::shared_ptr<MsckfVio> Ptr;
     typedef boost::shared_ptr<const MsckfVio> ConstPtr;
 
@@ -147,6 +149,8 @@ class MsckfVio {
     void onlineReset();
 
     YAML::Node cfg_cam_imu_;
+
+    std::vector<Eigen::Vector3d> path_;
 
     // Chi squared test table.
     static std::map<int, double> chi_squared_test_table;
