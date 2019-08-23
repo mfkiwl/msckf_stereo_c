@@ -74,7 +74,7 @@ class MsckfVio {
      */
     void featureCallback(const CameraMeasurementConstPtr& msg);
 
-    const std::vector<Eigen::Vector3d> get_path() const {return path_;}
+    std::vector<Eigen::Vector3d> get_path() {return path_;}
 
     typedef boost::shared_ptr<MsckfVio> Ptr;
     typedef boost::shared_ptr<const MsckfVio> ConstPtr;

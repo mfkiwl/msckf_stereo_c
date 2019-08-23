@@ -63,7 +63,7 @@ void process_image_data() {
 
         system_ptr->stereo_callback(imgs[0], imgs[1]);
 
-        usleep(30000);
+        usleep(50000*2);
 
         ++i;
     }
@@ -115,10 +115,9 @@ int main() {
 
     system_ptr.reset(new mynt::System(file_cam_imu));
 
+    std::thread thd_backend(&mynt::System::backend_callback, system_ptr);
     std::thread thd_image_data(process_image_data);
     std::thread thd_imu_data(process_imu_data);
-    std::thread thd_backend(&mynt::System::backend_callback, system_ptr);
-
     std::thread thd_draw(&mynt::System::draw, system_ptr);
 
     thd_image_data.join();

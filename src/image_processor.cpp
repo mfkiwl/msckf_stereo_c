@@ -14,6 +14,7 @@
 #include <Eigen/Dense>
 
 #include "random_numbers.h"
+#include "math_utils.hpp"
 
 using namespace std;
 using namespace cv;
@@ -78,8 +79,7 @@ namespace mynt {
         cam1_distortion_coeffs[3] = cam1_distortion_coeffs_temp[3];
 
         Eigen::Matrix4d m4_cam0_imu = cfg_cam_imu_["cam0"]["T_cam_imu"].as<Eigen::Matrix4d>();
-        cv::Mat T_imu_cam0(4, 4, CV_64FC1); // 坐标系变换
-        memcpy(T_imu_cam0.data, m4_cam0_imu.data(), sizeof(double) * 16);
+        cv::Mat T_imu_cam0 = matrix4d_to_cvmat(m4_cam0_imu); // 坐标系变换
 
         cv::Matx33d R_imu_cam0(T_imu_cam0(cv::Rect(0, 0, 3, 3)));
         cv::Vec3d t_imu_cam0 = T_imu_cam0(cv::Rect(3, 0, 1, 3));
@@ -87,8 +87,7 @@ namespace mynt {
         t_cam0_imu = -R_imu_cam0.t() * t_imu_cam0;
 
         Eigen::Matrix4d m4_cam1_cam0 = cfg_cam_imu_["cam1"]["T_cn_cnm1"].as<Eigen::Matrix4d>();
-        cv::Mat T_cam0_cam1(4, 4, CV_64FC1); // 坐标系变换
-        memcpy(T_cam0_cam1.data, m4_cam1_cam0.data(), sizeof(double) * 16);
+        cv::Mat T_cam0_cam1 = matrix4d_to_cvmat(m4_cam1_cam0); // 坐标系变换
 
         cv::Mat T_imu_cam1 = T_cam0_cam1 * T_imu_cam0; // 右乘
         cv::Matx33d R_imu_cam1(T_imu_cam1(cv::Rect(0, 0, 3, 3)));
@@ -109,6 +108,12 @@ namespace mynt {
         processor_config.stereo_threshold = cfg_imgproc["stereo_threshold"].as<int>();
         processor_config.max_iteration = cfg_imgproc["max_iteration"].as<int>();
         processor_config.track_precision = cfg_imgproc["track_precision"].as<double>();
+
+        std::cout << "================== ImageProcessor::loadParameters ==================" << std::endl;
+        std::cout << "T_imu_cam0:\n" << T_imu_cam0 << std::endl;
+        std::cout << "T_cam0_cam1:\n" << T_cam0_cam1 << std::endl;
+        std::cout << "R_cam1_imu:\n" << R_cam1_imu << std::endl;
+        std::cout << "t_cam1_imu:\n" << t_cam1_imu << std::endl;
 
         return true;
     }
@@ -133,7 +138,7 @@ namespace mynt {
     bool ImageProcessor::initialize() {
         if (!loadParameters())
             return false;
-        std::cout << "Finish loading ROS parameters..." << std::endl;
+        std::cout << "Finish loading parameters..." << std::endl;
 
         // Create feature detector.
         detector_ptr = FastFeatureDetector::create(processor_config.fast_threshold);
@@ -497,12 +502,12 @@ namespace mynt {
         for (const auto &item : *curr_features_ptr)
             curr_feature_num += item.second.size();
 
-        printf(
-                "\033[0;32m candidates: %d; raw track: %d; stereo match: %d; ransac: %d/%d=%f\033[0m\n",
-                before_tracking, after_tracking, after_matching,
-                curr_feature_num, prev_feature_num,
-                static_cast<double>(curr_feature_num) /
-                (static_cast<double>(prev_feature_num) + 1e-5));
+//        printf(
+//                "\033[0;32m candidates: %d; raw track: %d; stereo match: %d; ransac: %d/%d=%f\033[0m\n",
+//                before_tracking, after_tracking, after_matching,
+//                curr_feature_num, prev_feature_num,
+//                static_cast<double>(curr_feature_num) /
+//                (static_cast<double>(prev_feature_num) + 1e-5));
 
         return;
     }
@@ -1330,13 +1335,14 @@ namespace mynt {
             // Draw new features.
             for (const auto &new_cam0_point : curr_cam0_points) {
                 cv::Point2f pt0 = new_cam0_point.second;
-                cv::Point2f pt1 = curr_cam1_points[new_cam0_point.first] +
-                                  Point2f(img_width, 0.0);
+                cv::Point2f pt1 = curr_cam1_points[new_cam0_point.first] + Point2f(img_width, 0.0);
 
                 circle(out_img, pt0, 3, new_feature, -1);
                 circle(out_img, pt1, 3, new_feature, -1);
             }
 
+            cv::resize(out_img, out_img, cv::Size(out_img.cols*0.5, out_img.rows*0.5));
+            cv::namedWindow("Feature");
             cv::imshow("Feature", out_img);
             cv::waitKey(5);
         }

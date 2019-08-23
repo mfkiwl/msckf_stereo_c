@@ -67,8 +67,13 @@ namespace YAML {
             if(!node.IsSequence() || node.size() != 16) {
                 return false;
             }
-            for(int i=0; i<16; ++i)
-                rhs.data()[i] = node[i].as<double>();
+//            for(int i=0; i<16; ++i)
+//                rhs.data()[i] = node[i].as<double>();
+
+            for(int i=0; i<4; ++i)
+                for(int j=0; j<4; ++j)
+                    rhs(i,j) = node[j+i*4].as<double>();
+
             return true;
         }
     };

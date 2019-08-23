@@ -19,7 +19,8 @@
 #include <Eigen/SVD>
 #include <Eigen/QR>
 #include <Eigen/SparseCore>
-// #include <Eigen/SPQRSupport>
+
+#include <Eigen/SPQRSupport>
 // #include <SuiteSparseQR_definitions.h>
 
 #include "math_utils.hpp"
@@ -113,33 +114,22 @@ namespace mynt {
 
         // Transformation offsets between the frames involved.
         Eigen::Matrix4d m4_cam0_imu = cfg_cam_imu_["cam0"]["T_cam_imu"].as<Eigen::Matrix4d>();
-        Eigen::Matrix3d m3_cam0_imu = m4_cam0_imu.block<3,3>(0,0);
-        Eigen::Vector3d v3_cam0_imu = m4_cam0_imu.block<3,1>(0,3);
-
-        Isometry3d T_imu_cam0 = Eigen::Isometry3d::Identity(); // 坐标系变换
-        T_imu_cam0.rotate(m3_cam0_imu);
-        T_imu_cam0.pretranslate(v3_cam0_imu);
+        Isometry3d T_imu_cam0 = matrix4d_to_isometry3d(m4_cam0_imu); // 坐标系变换
 
         Isometry3d T_cam0_imu = T_imu_cam0.inverse();
         state_server.imu_state.R_imu_cam0 = T_cam0_imu.linear().transpose();
         state_server.imu_state.t_cam0_imu = T_cam0_imu.translation();
 
         Eigen::Matrix4d m4_cam1_cam0 = cfg_cam_imu_["cam1"]["T_cn_cnm1"].as<Eigen::Matrix4d>();
-        Eigen::Matrix3d m3_cam1_cam0 = m4_cam1_cam0.block<3,3>(0,0);
-        Eigen::Vector3d v3_cam1_cam0 = m4_cam1_cam0.block<3,1>(0,3);
-
-        CAMState::T_cam0_cam1 = Eigen::Isometry3d::Identity(); // 坐标系变换
-        CAMState::T_cam0_cam1.rotate(m3_cam1_cam0);
-        CAMState::T_cam0_cam1.pretranslate(v3_cam1_cam0);
+        CAMState::T_cam0_cam1 = matrix4d_to_isometry3d(m4_cam1_cam0); // 坐标系变换
 
         Eigen::Matrix4d m4_imu_body = cfg_cam_imu_["T_imu_body"].as<Eigen::Matrix4d>();
-        Eigen::Matrix3d m3_imu_body = m4_imu_body.block<3,3>(0,0);
-        Eigen::Vector3d v3_imu_body = m4_imu_body.block<3,1>(0,3);
-        Isometry3d i3_imu_body = Eigen::Isometry3d::Identity();
-        i3_imu_body.rotate(m3_imu_body);
-        i3_imu_body.pretranslate(v3_imu_body);
+        IMUState::T_imu_body = matrix4d_to_isometry3d(m4_imu_body).inverse();
 
-        IMUState::T_imu_body = i3_imu_body.inverse();
+        std::cout << "================== MsckfVio::loadParameters ==================" << std::endl;
+        std::cout << "T_imu_cam0:\n" << T_imu_cam0.matrix() << std::endl;
+        std::cout << "T_cam0_cam1:\n" << CAMState::T_cam0_cam1.matrix() << std::endl;
+        std::cout << "T_imu_body:\n" << IMUState::T_imu_body.matrix() << std::endl;
 
         // Maximum number of camera states to be stored
         max_cam_state_size = cfg_msckfvio["max_cam_state_size"].as<double>();
@@ -166,7 +156,7 @@ namespace mynt {
     bool MsckfVio::initialize() {
         if (!loadParameters())
             return false;
-        std::cout << "Finish loading ROS parameters..." << std::endl;
+        std::cout << "Finish loading parameters..." << std::endl;
 
         // Initialize state server
         state_server.continuous_noise_cov = Matrix<double, 12, 12>::Zero();
@@ -326,53 +316,59 @@ namespace mynt {
         // that are received before the image msg.
         auto start_time = std::chrono::system_clock::now();
         batchImuProcessing(msg->time_stamp);
-        double imu_processing_time = (std::chrono::system_clock::now() - start_time).count();
+        double imu_processing_time =
+                std::chrono::duration<double>(std::chrono::system_clock::now() - start_time).count();
 
         // Augment the state vector.
         start_time = std::chrono::system_clock::now();
         stateAugmentation(msg->time_stamp);
-        double state_augmentation_time = (std::chrono::system_clock::now() - start_time).count();
+        double state_augmentation_time =
+                std::chrono::duration<double>(std::chrono::system_clock::now() - start_time).count();
 
         // Add new observations for existing features or new
         // features in the map server.
         start_time = std::chrono::system_clock::now();
         addFeatureObservations(msg);
-        double add_observations_time = (std::chrono::system_clock::now() - start_time).count();
+        double add_observations_time =
+                std::chrono::duration<double>(std::chrono::system_clock::now() - start_time).count();
 
         // Perform measurement update if necessary.
         start_time = std::chrono::system_clock::now();
         removeLostFeatures();
-        double remove_lost_features_time = (std::chrono::system_clock::now() - start_time).count();
+        double remove_lost_features_time =
+                std::chrono::duration<double>(std::chrono::system_clock::now() - start_time).count();
 
         start_time = std::chrono::system_clock::now();
         pruneCamStateBuffer();
-        double prune_cam_states_time = (std::chrono::system_clock::now() - start_time).count();
+        double prune_cam_states_time =
+                std::chrono::duration<double>(std::chrono::system_clock::now() - start_time).count();
 
         // Publish the odometry.
         start_time = std::chrono::system_clock::now();
         publish(msg->time_stamp);
-        double publish_time = (std::chrono::system_clock::now() - start_time).count();
+        double publish_time =
+                std::chrono::duration<double>(std::chrono::system_clock::now() - start_time).count();
 
         // Reset the system if necessary.
         onlineReset();
 
         auto processing_end_time = std::chrono::system_clock::now();
-        double processing_time = (processing_end_time - processing_start_time).count();
+        double processing_time = std::chrono::duration<double>(processing_end_time - processing_start_time).count();
         if (processing_time > 1.0 / frame_rate) {
             ++critical_time_cntr;
             printf("\033[1;31mTotal processing time %f/%d...\033[0m\n", processing_time, critical_time_cntr);
-            //printf("IMU processing time: %f/%f\n",
-            //    imu_processing_time, imu_processing_time/processing_time);
-            //printf("State augmentation time: %f/%f\n",
-            //    state_augmentation_time, state_augmentation_time/processing_time);
-            //printf("Add observations time: %f/%f\n",
-            //    add_observations_time, add_observations_time/processing_time);
+            printf("IMU processing time: %f/%f\n",
+                imu_processing_time, imu_processing_time/processing_time);
+            printf("State augmentation time: %f/%f\n",
+                state_augmentation_time, state_augmentation_time/processing_time);
+            printf("Add observations time: %f/%f\n",
+                add_observations_time, add_observations_time/processing_time);
             printf("Remove lost features time: %f/%f\n",
                    remove_lost_features_time, remove_lost_features_time / processing_time);
             printf("Remove camera states time: %f/%f\n",
                    prune_cam_states_time, prune_cam_states_time / processing_time);
-            //printf("Publish time: %f/%f\n",
-            //    publish_time, publish_time/processing_time);
+            printf("Publish time: %f/%f\n",
+                publish_time, publish_time/processing_time);
         }
 
         return;
@@ -848,26 +844,25 @@ namespace mynt {
             // Convert H to a sparse matrix.
             SparseMatrix<double> H_sparse = H.sparseView();
 
-            // TODO
             // Perform QR decompostion on H_sparse.
-//            SPQR<SparseMatrix<double> > spqr_helper;
-//            spqr_helper.setSPQROrdering(SPQR_ORDERING_NATURAL); // SPQR_ORDERING_NATURAL from suitesparse
-//            spqr_helper.compute(H_sparse);
-//
-//            MatrixXd H_temp;
-//            VectorXd r_temp;
-//            (spqr_helper.matrixQ().transpose() * H).evalTo(H_temp);
-//            (spqr_helper.matrixQ().transpose() * r).evalTo(r_temp);
-//
-//            H_thin = H_temp.topRows(21 + state_server.cam_states.size() * 6);
-//            r_thin = r_temp.head(21 + state_server.cam_states.size() * 6);
+            SPQR<SparseMatrix<double> > spqr_helper;
+            spqr_helper.setSPQROrdering(SPQR_ORDERING_NATURAL); // SPQR_ORDERING_NATURAL from suitesparse
+            spqr_helper.compute(H_sparse);
 
-            HouseholderQR<MatrixXd> qr_helper(H);
-            MatrixXd Q = qr_helper.householderQ();
-            MatrixXd Q1 = Q.leftCols(21+state_server.cam_states.size()*6);
+            MatrixXd H_temp;
+            VectorXd r_temp;
+            (spqr_helper.matrixQ().transpose() * H).evalTo(H_temp);
+            (spqr_helper.matrixQ().transpose() * r).evalTo(r_temp);
 
-            H_thin = Q1.transpose() * H;
-            r_thin = Q1.transpose() * r;
+            H_thin = H_temp.topRows(21 + state_server.cam_states.size() * 6);
+            r_thin = r_temp.head(21 + state_server.cam_states.size() * 6);
+
+//            HouseholderQR<MatrixXd> qr_helper(H);
+//            MatrixXd Q = qr_helper.householderQ();
+//            MatrixXd Q1 = Q.leftCols(21+state_server.cam_states.size()*6);
+//
+//            H_thin = Q1.transpose() * H;
+//            r_thin = Q1.transpose() * r;
         } else {
             H_thin = H;
             r_thin = r;
@@ -1205,8 +1200,7 @@ namespace mynt {
     }
 
     void MsckfVio::onlineReset() {
-        // Never perform online reset if position std threshold
-        // is non-positive.
+        // Never perform online reset if position std threshold is non-positive.
         if (position_std_threshold <= 0)
             return;
         static long long int online_reset_counter = 0;
@@ -1277,7 +1271,7 @@ namespace mynt {
 //        }
 
         // Publish the odometry: T_b_w, body_velocity
-        Eigen::Matrix3d m3_r =  T_b_w.rotation();
+        Eigen::Matrix3d m3_r = T_b_w.rotation();
         Eigen::Vector3d v3_t = T_b_w.translation();
         Eigen::Quaterniond q4_r(m3_r);
 

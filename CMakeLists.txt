@@ -6,29 +6,29 @@ set(CMAKE_BUILD_TYPE "Debug")
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_FLAGS "-O3 -g")
 
-#set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake_modules")
-#
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake_modules")
+
+find_package(Cholmod)
+if(CHOLMOD_FOUND)
+    add_definitions("-DEIGEN_CHOLMOD_SUPPORT")
+    include_directories(${CHOLMOD_INCLUDES})
+    set(CHOLMOD_ALL_LIBS  ${CHOLMOD_LIBRARIES} ${EIGEN_BLAS_LIBRARIES} ${EIGEN_LAPACK_LIBRARIES})
+endif()
+
 #find_package(SPQR)
 #if(SPQR_FOUND AND CHOLMOD_FOUND AND (EIGEN_Fortran_COMPILER_WORKS OR LAPACK_FOUND) )
 #    add_definitions("-DEIGEN_SPQR_SUPPORT")
 #    include_directories(${SPQR_INCLUDES})
-#    set(SPQR_ALL_LIBS ${SPQR_LIBRARIES} ${CHOLMOD_LIBRARIES} ${EIGEN_LAPACK_LIBRARIES} ${EIGEN_BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
-#    set(SPARSE_LIBS ${SPARSE_LIBS} ${SPQR_ALL_LIBS})
-#    message("===SPARSE_LIBS:" ${SPARSE_LIBS})
+#    set(SPARSE_LIBS ${SPARSE_LIBS} ${SPQR_LIBRARIES} ${LAPACK_LIBRARIES} ${CHOLMOD_ALL_LIBS})
+#    message("===INCLUDE: " ${SPQR_INCLUDES})
+#else()
+#    message("=== SPQR NOT FOUND")
 #endif()
-#
-#find_package(Cholmod)
-#if(CHOLMOD_FOUND)
-#    add_definitions("-DEIGEN_CHOLMOD_SUPPORT")
-#    include_directories(${CHOLMOD_INCLUDES})
-#    set(SPARSE_LIBS ${SPARSE_LIBS} ${CHOLMOD_LIBRARIES} ${EIGEN_BLAS_LIBRARIES} ${EIGEN_LAPACK_LIBRARIES})
-#    set(CHOLMOD_ALL_LIBS  ${CHOLMOD_LIBRARIES} ${EIGEN_BLAS_LIBRARIES} ${EIGEN_LAPACK_LIBRARIES})
-#    message("===CHOLMOD_ALL_LIBS:" ${CHOLMOD_ALL_LIBS})
-#endif()
+include_directories(/usr/include/suitesparse)
+
+include_directories(/usr/include/eigen3)
 
 include_directories(include)
-#/usr/include/suitesparse
-include_directories(/usr/include/eigen3)
 
 find_package(Boost REQUIRED COMPONENTS system)
 include_directories(${Boost_INCLUDE_DIR})
@@ -49,7 +49,7 @@ include_directories(${Pangolin_INCLUDE_DIRS})
 link_libraries(${Pangolin_LIBRARIES})
 
 set(SRC_LIST src/random_numbers.cpp src/image_processor.cpp src/msckf_vio.cpp src/system.cpp)
-set(LIB_LIST ${OpenCV_LIBS} ${Boost_LIBRARIES} -lpthread)
+set(LIB_LIST ${OpenCV_LIBS} ${Boost_LIBRARIES} -lpthread ${LAPACK_LIBRARIES} ${CHOLMOD_ALL_LIBS} -lspqr)
 
 add_executable(run_euroc src/apps/run_euroc.cpp ${SRC_LIST})
 target_link_libraries(run_euroc ${LIB_LIST})

@@ -60,13 +60,13 @@ namespace mynt {
             mt_feature_.lock();
             msckfvio_ptr_->featureCallback(feature_msg_ptr_);
             mt_feature_.unlock();
-            usleep(30000);
+            usleep(10000);
         }
     }
 
     void System::draw() {
         // create pangolin window and plot the trajectory
-        pangolin::CreateWindowAndBind("Trajectory Viewer", 1024, 768);
+        pangolin::CreateWindowAndBind("Trajectory Viewer", 640, 480);
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
