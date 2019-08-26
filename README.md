@@ -15,12 +15,21 @@ make -j3
 
 ## Run
 
-```sh
-cd build
-./run_euroc
-```
+* main project
+  ```sh
+  cd build
+  ./run_euroc
+  ```
 
-## Dataset
+* unit test
+  ```sh
+  cd build
+  ./test/run_unit_test
+  ```
+
+## Test Dataset
+
+Remember change the value of variable `std::string euroc_dir` defined in **run_euroc.cpp**. 
 
 * [The EuRoC MAV Dataset](https://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets)
   - [V1_01_easy.zip](http://robotics.ethz.ch/~asl-datasets/ijrr_euroc_mav_dataset/vicon_room1/V1_01_easy/V1_01_easy.zip)
