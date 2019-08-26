@@ -72,7 +72,7 @@ namespace mynt {
         cam0_distortion_coeffs[2] = cam0_distortion_coeffs_temp[2];
         cam0_distortion_coeffs[3] = cam0_distortion_coeffs_temp[3];
 
-        Eigen::Vector4d cam1_distortion_coeffs_temp = cfg_cam_imu_["cam0"]["distortion_coeffs"].as<Eigen::Vector4d>();
+        Eigen::Vector4d cam1_distortion_coeffs_temp = cfg_cam_imu_["cam1"]["distortion_coeffs"].as<Eigen::Vector4d>();
         cam1_distortion_coeffs[0] = cam1_distortion_coeffs_temp[0];
         cam1_distortion_coeffs[1] = cam1_distortion_coeffs_temp[1];
         cam1_distortion_coeffs[2] = cam1_distortion_coeffs_temp[2];
@@ -109,11 +109,43 @@ namespace mynt {
         processor_config.max_iteration = cfg_imgproc["max_iteration"].as<int>();
         processor_config.track_precision = cfg_imgproc["track_precision"].as<double>();
 
-        std::cout << "================== ImageProcessor::loadParameters ==================" << std::endl;
+        printf("ImageProcessor begin ===========================================\n");
+        
+        printf("cam0_resolution: %d, %d\n", cam0_resolution[0], cam0_resolution[1]);
+        printf("cam0_intrinscs: %f, %f, %f, %f\n", cam0_intrinsics[0], cam0_intrinsics[1], cam0_intrinsics[2], cam0_intrinsics[3]);
+        printf("cam0_distortion_model: %s\n", cam0_distortion_model.c_str());
+        printf("cam0_distortion_coefficients: %f, %f, %f, %f\n",
+            cam0_distortion_coeffs[0], cam0_distortion_coeffs[1],
+            cam0_distortion_coeffs[2], cam0_distortion_coeffs[3]);
+
+        printf("cam1_resolution: %d, %d\n", cam1_resolution[0], cam1_resolution[1]);
+        printf("cam1_intrinscs: %f, %f, %f, %f\n", cam1_intrinsics[0], cam1_intrinsics[1], cam1_intrinsics[2], cam1_intrinsics[3]);
+        printf("cam1_distortion_model: %s\n", cam1_distortion_model.c_str());
+        printf("cam1_distortion_coefficients: %f, %f, %f, %f\n",
+            cam1_distortion_coeffs[0], cam1_distortion_coeffs[1],
+            cam1_distortion_coeffs[2], cam1_distortion_coeffs[3]);
+
+        cout << R_imu_cam0 << endl;
+        cout << t_imu_cam0.t() << endl;
+
+        printf("grid_row: %d\n", processor_config.grid_row);
+        printf("grid_col: %d\n", processor_config.grid_col);
+        printf("grid_min_feature_num: %d\n", processor_config.grid_min_feature_num);
+        printf("grid_max_feature_num: %d\n", processor_config.grid_max_feature_num);
+        printf("pyramid_levels: %d\n", processor_config.pyramid_levels);
+        printf("patch_size: %d\n", processor_config.patch_size);
+        printf("fast_threshold: %d\n", processor_config.fast_threshold);
+        printf("max_iteration: %d\n", processor_config.max_iteration);
+        printf("track_precision: %f\n", processor_config.track_precision);
+        printf("ransac_threshold: %f\n", processor_config.ransac_threshold);
+        printf("stereo_threshold: %f\n", processor_config.stereo_threshold);
+
         std::cout << "T_imu_cam0:\n" << T_imu_cam0 << std::endl;
         std::cout << "T_cam0_cam1:\n" << T_cam0_cam1 << std::endl;
         std::cout << "R_cam1_imu:\n" << R_cam1_imu << std::endl;
         std::cout << "t_cam1_imu:\n" << t_cam1_imu << std::endl;
+
+        printf("ImageProcessor end ===========================================\n");
 
         return true;
     }

@@ -126,13 +126,41 @@ namespace mynt {
         Eigen::Matrix4d m4_imu_body = cfg_cam_imu_["T_imu_body"].as<Eigen::Matrix4d>();
         IMUState::T_imu_body = matrix4d_to_isometry3d(m4_imu_body).inverse();
 
-        std::cout << "================== MsckfVio::loadParameters ==================" << std::endl;
+        // Maximum number of camera states to be stored
+        max_cam_state_size = cfg_msckfvio["max_cam_state_size"].as<double>();
+
+        printf("MsckfVio begin ===========================================\n");
+        
+        printf("frame rate: %f\n", frame_rate);
+        printf("position std threshold: %f\n", position_std_threshold);
+        printf("Keyframe rotation threshold: %f\n", rotation_threshold);
+        printf("Keyframe translation threshold: %f\n", translation_threshold);
+        printf("Keyframe tracking rate threshold: %f\n", tracking_rate_threshold);
+        printf("gyro noise: %.10f\n", IMUState::gyro_noise);
+        printf("gyro bias noise: %.10f\n", IMUState::gyro_bias_noise);
+        printf("acc noise: %.10f\n", IMUState::acc_noise);
+        printf("acc bias noise: %.10f\n", IMUState::acc_bias_noise);
+        printf("observation noise: %.10f\n", Feature::observation_noise);
+        printf("initial velocity: %f, %f, %f\n",
+            state_server.imu_state.velocity(0),
+            state_server.imu_state.velocity(1),
+            state_server.imu_state.velocity(2));
+        printf("initial gyro bias cov: %f\n", gyro_bias_cov);
+        printf("initial acc bias cov: %f\n", acc_bias_cov);
+        printf("initial velocity cov: %f\n", velocity_cov);
+        printf("initial extrinsic rotation cov: %f\n", extrinsic_rotation_cov);
+        printf("initial extrinsic translation cov: %f\n", extrinsic_translation_cov);
+
+        cout << T_imu_cam0.linear() << endl;
+        cout << T_imu_cam0.translation().transpose() << endl;
+
+        printf("max camera state #: %d\n", max_cam_state_size);
+
         std::cout << "T_imu_cam0:\n" << T_imu_cam0.matrix() << std::endl;
         std::cout << "T_cam0_cam1:\n" << CAMState::T_cam0_cam1.matrix() << std::endl;
         std::cout << "T_imu_body:\n" << IMUState::T_imu_body.matrix() << std::endl;
 
-        // Maximum number of camera states to be stored
-        max_cam_state_size = cfg_msckfvio["max_cam_state_size"].as<double>();
+        printf("MsckfVio end ===========================================\n");
 
         return true;
     }
