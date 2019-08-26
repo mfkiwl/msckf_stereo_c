@@ -13,7 +13,7 @@
 #include "system.h"
 
 // params
-std::string euroc_dir = "/home/cg/projects/datasets/MH_01_easy/mav0/";
+std::string euroc_dir = "/home/cg/projects/datasets/V1_01_easy/mav0/";
 int num_cams = 2;
 
 std::vector<std::vector<std::pair<double,std::string>>> data_img(num_cams);

@@ -22,7 +22,8 @@ cd build
 
 ## Dataset
 
-* MH_01_easy
+* [The EuRoC MAV Dataset](https://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets)
+  - [V1_01_easy.zip](http://robotics.ethz.ch/~asl-datasets/ijrr_euroc_mav_dataset/vicon_room1/V1_01_easy/V1_01_easy.zip)
 
 ## TODO
 

@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 2.8)
 
 project(msckf_vio_mynt)
 
-set(CMAKE_BUILD_TYPE "Debug")
+set(CMAKE_BUILD_TYPE "Release")
 set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_FLAGS "-O3 -g")
+set(CMAKE_CXX_FLAGS "-O3")
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake_modules")
 
