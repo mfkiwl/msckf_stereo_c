@@ -1305,9 +1305,10 @@ namespace mynt {
 
         path_.push_back(v3_t);
 
+        // TUM format
         pose_outfile_ << std::fixed << time_stamp << " "
                       << v3_t[0] << " " << v3_t[1] << " " << v3_t[2] << " "
-                      << q4_r.x() << " " << q4_r.y() << " " << q4_r.z() << " " << q4_r.w() << " " << std::endl;
+                      << q4_r.x() << " " << q4_r.y() << " " << q4_r.z() << " " << q4_r.w() << std::endl;
 
         std::cout << std::fixed << time_stamp << " " << v3_t[0] << " " << v3_t[1] << " " << v3_t[2] << std::endl;
 

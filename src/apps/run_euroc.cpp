@@ -48,8 +48,9 @@ void process_image_data() {
     }
     if(num_cams == 2)
         assert(data_img[0].size() == data_img[1].size());
-    int i = 0;
-    while(i < data_img[0].size()) {
+    
+    unsigned int imgs_size = data_img[0].size();
+    for(int i = 0; i < imgs_size; ++i) {
         mynt::Image imgs[num_cams];
         for(int j=0; j<num_cams; ++j) {
             imgs[j].time_stamp = data_img[j][i].first*1e-9; // to seconds;
@@ -65,9 +66,7 @@ void process_image_data() {
 
         system_ptr->stereo_callback(imgs[0], imgs[1]);
 
-        usleep(50000*2);
-
-        ++i;
+        usleep(50000);
     }
 }
 
@@ -105,7 +104,7 @@ void process_imu_data() {
 
         system_ptr->imu_callback(imu);
 
-        usleep(5000*2);
+        usleep(5000);
     }
     imu_file.close();
 }
