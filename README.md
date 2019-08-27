@@ -29,10 +29,46 @@ make -j3
 
 ## Test Dataset
 
-Remember change the value of variable `std::string euroc_dir` defined in **run_euroc.cpp**. 
+Remember change the value of variable `std::string euroc_dir` defined in **run_euroc.cpp**.
 
 * [The EuRoC MAV Dataset](https://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets)
   - [V1_01_easy.zip](http://robotics.ethz.ch/~asl-datasets/ijrr_euroc_mav_dataset/vicon_room1/V1_01_easy/V1_01_easy.zip)
+
+## Results
+
+result for running with V1_01_easy dataset
+
+* original msckf_vio
+  ![](./images/msckf_vio_euroc_v1_origin.png)
+
+* our msckf_vio
+  ![](./images/msckf_vio_euroc_v1_this.png)
+
+### Evaluation
+
+evaluate the SLAM/tracking results **pose_out.txt** with the groundtruth of V1_01_easy dataset using **rgbd_benchmark_tools** of TUM
+
+* original msckf_vio
+  ```sh
+  absolute_translational_error.rmse 0.071404 m
+  absolute_translational_error.mean 0.067402 m
+  absolute_translational_error.median 0.067896 m
+  absolute_translational_error.std 0.023568 m
+  absolute_translational_error.min 0.004329 m
+  absolute_translational_error.max 0.142763 m
+  ```
+  ![](./images/eval_euroc_v1_origin.png)
+
+* our msckf_vio
+  ```sh
+  absolute_translational_error.rmse 0.264028 m
+  absolute_translational_error.mean 0.241694 m
+  absolute_translational_error.median 0.222784 m
+  absolute_translational_error.std 0.106277 m
+  absolute_translational_error.min 0.028613 m
+  absolute_translational_error.max 0.490709 m
+  ```
+  ![](./images/eval_euroc_v1_this.png)
 
 ## TODO
 
