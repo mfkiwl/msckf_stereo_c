@@ -59,6 +59,7 @@ namespace mynt {
         while(is_start_backend_) {
             mt_feature_.lock();
             msckfvio_ptr_->featureCallback(feature_msg_ptr_);
+            path_to_draw_ = msckfvio_ptr_->get_path();
             mt_feature_.unlock();
             usleep(10000);
         }
@@ -92,12 +93,12 @@ namespace mynt {
             glColor3f(0, 0, 0);
             glLineWidth(2);
             glBegin(GL_LINES);
-            std::vector<Eigen::Vector3d> path_to_draw = msckfvio_ptr_->get_path();
-            int nPath_size = path_to_draw.size();
+            // std::vector<Eigen::Vector3d> path_to_draw = path_to_draw_;
+            int nPath_size = path_to_draw_.size();
             for(int i = 0; i < nPath_size-1; ++i)
             {
-                glVertex3f(path_to_draw[i].x(), path_to_draw[i].y(), path_to_draw[i].z());
-                glVertex3f(path_to_draw[i+1].x(), path_to_draw[i+1].y(), path_to_draw[i+1].z());
+                glVertex3f(path_to_draw_[i].x(), path_to_draw_[i].y(), path_to_draw_[i].z());
+                glVertex3f(path_to_draw_[i+1].x(), path_to_draw_[i+1].y(), path_to_draw_[i+1].z());
             }
             glEnd();
 

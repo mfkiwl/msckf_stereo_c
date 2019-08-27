@@ -213,7 +213,7 @@ namespace mynt {
         // being processed immediately. The IMU msgs are processed
         // when the next image is available, in which way, we can
         // easily handle the transfer delay.
-        imu_msg_buffer.push_back(msg);
+        imu_msg_buffer.push_back(*msg);
 
         if (!is_gravity_set) {
             if (imu_msg_buffer.size() < 200) {
@@ -233,8 +233,8 @@ namespace mynt {
         Vector3d sum_linear_acc = Vector3d::Zero();
 
         for (const auto &imu_msg : imu_msg_buffer) {
-            Vector3d angular_vel = imu_msg->angular_velocity;
-            Vector3d linear_acc = imu_msg->linear_acceleration;
+            Vector3d angular_vel = imu_msg.angular_velocity;
+            Vector3d linear_acc = imu_msg.linear_acceleration;
 
             sum_angular_vel += angular_vel;
             sum_linear_acc += linear_acc;
@@ -474,7 +474,7 @@ namespace mynt {
         int used_imu_msg_cntr = 0;
 
         for (const auto &imu_msg : imu_msg_buffer) {
-            double imu_time = imu_msg->time_stamp;
+            double imu_time = imu_msg.time_stamp;
             if (imu_time < state_server.imu_state.time) {
                 ++used_imu_msg_cntr;
                 continue;
@@ -484,8 +484,8 @@ namespace mynt {
 
             // Convert the msgs.
             Vector3d m_gyro, m_acc;
-            m_gyro = imu_msg->angular_velocity;
-            m_acc  = imu_msg->linear_acceleration;
+            m_gyro = imu_msg.angular_velocity;
+            m_acc  = imu_msg.linear_acceleration;
 
             // Execute process model.
             processModel(imu_time, m_gyro, m_acc);

@@ -333,7 +333,7 @@ namespace mynt {
         cv::Ptr<cv::Feature2D> detector_ptr;
 
         // IMU message buffer.
-        std::vector<mynt::ImuConstPtr> imu_msg_buffer;
+        std::vector<mynt::Imu> imu_msg_buffer;
 
         // Camera calibration parameters
         std::string cam0_distortion_model;

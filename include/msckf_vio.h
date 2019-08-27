@@ -166,7 +166,7 @@ class MsckfVio {
     // IMU data buffer
     // This is buffer is used to handle the unsynchronization or
     // transfer delay between IMU and Image messages.
-    std::vector<mynt::ImuConstPtr> imu_msg_buffer;
+    std::vector<mynt::Imu> imu_msg_buffer;
 
     // Indicate if the gravity vector is set.
     bool is_gravity_set;

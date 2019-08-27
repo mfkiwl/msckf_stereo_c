@@ -33,6 +33,8 @@ namespace mynt {
 
         boost::shared_ptr<CameraMeasurement> feature_msg_ptr_;
 
+        std::vector<Eigen::Vector3d> path_to_draw_;
+
         mynt::ImageProcessorPtr imgproc_ptr_;
         mynt::MsckfVioPtr msckfvio_ptr_;
 

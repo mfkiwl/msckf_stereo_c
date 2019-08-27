@@ -46,6 +46,8 @@ void process_image_data() {
         }
         is_init = true;
     }
+    if(num_cams == 2)
+        assert(data_img[0].size() == data_img[1].size());
     int i = 0;
     while(i < data_img[0].size()) {
         mynt::Image imgs[num_cams];

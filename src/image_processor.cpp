@@ -233,7 +233,7 @@ namespace mynt {
         // Wait for the first image to be set.
         if (is_first_img)
             return;
-        imu_msg_buffer.push_back(msg);
+        imu_msg_buffer.push_back(*msg);
         return;
     }
 
@@ -855,7 +855,7 @@ namespace mynt {
         // Find the start and the end limit within the imu msg buffer.
         auto begin_iter = imu_msg_buffer.begin();
         while (begin_iter != imu_msg_buffer.end()) {
-            if ((*begin_iter)->time_stamp - cam0_prev_img_ptr->time_stamp < -0.01)
+            if (begin_iter->time_stamp - cam0_prev_img_ptr->time_stamp < -0.01)
                 ++begin_iter;
             else
                 break;
@@ -863,7 +863,7 @@ namespace mynt {
 
         auto end_iter = begin_iter;
         while (end_iter != imu_msg_buffer.end()) {
-            if ((*end_iter)->time_stamp - cam0_curr_img_ptr->time_stamp < 0.005)
+            if (end_iter->time_stamp - cam0_curr_img_ptr->time_stamp < 0.005)
                 ++end_iter;
             else
                 break;
@@ -872,8 +872,7 @@ namespace mynt {
         // Compute the mean angular velocity in the IMU frame.
         Vec3f mean_ang_vel(0.0, 0.0, 0.0);
         for (auto iter = begin_iter; iter < end_iter; ++iter)
-            mean_ang_vel += Vec3f((*iter)->angular_velocity[0],
-                                  (*iter)->angular_velocity[1], (*iter)->angular_velocity[2]);
+            mean_ang_vel += Vec3f(iter->angular_velocity[0], iter->angular_velocity[1], iter->angular_velocity[2]);
 
         if (end_iter - begin_iter > 0)
             mean_ang_vel *= 1.0f / (end_iter - begin_iter);
