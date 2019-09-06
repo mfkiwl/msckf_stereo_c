@@ -59,7 +59,7 @@ evaluate the SLAM/tracking results **pose_out.txt** with the groundtruth of V1_0
   ```
   ![](./images/eval_euroc_v1_origin.png)
 
-* our msckf_vio
+* our msckf_vio 01
   ```sh
   absolute_translational_error.rmse 0.264028 m
   absolute_translational_error.mean 0.241694 m
@@ -68,7 +68,18 @@ evaluate the SLAM/tracking results **pose_out.txt** with the groundtruth of V1_0
   absolute_translational_error.min 0.028613 m
   absolute_translational_error.max 0.490709 m
   ```
-  ![](./images/eval_euroc_v1_this.png)
+  ![](./images/eval_euroc_v1_this_01.png)
+
+* our msckf_vio 02
+  ```sh
+  absolute_translational_error.rmse 0.120664 m
+  absolute_translational_error.mean 0.108885 m
+  absolute_translational_error.median 0.097097 m
+  absolute_translational_error.std 0.052000 m
+  absolute_translational_error.min 0.017028 m
+  absolute_translational_error.max 0.243474 m
+  ```
+  ![](./images/eval_euroc_v1_this_02.png)
 
 ## TODO
 

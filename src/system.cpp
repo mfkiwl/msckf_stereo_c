@@ -61,7 +61,7 @@ namespace mynt {
             msckfvio_ptr_->featureCallback(feature_msg_ptr_);
             path_to_draw_ = msckfvio_ptr_->get_path();
             mt_feature_.unlock();
-            usleep(30000);
+            usleep(65000);
         }
     }
 
