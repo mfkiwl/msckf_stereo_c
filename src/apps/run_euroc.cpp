@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <thread>
+#include <chrono>
 
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
@@ -15,6 +16,7 @@
 // params
 std::string euroc_dir = "/home/cg/projects/datasets/V1_01_easy/mav0/";
 int num_cams = 2;
+double timestamp_first = 0.0;
 
 std::vector<std::vector<std::pair<double,std::string>>> data_img(num_cams);
 
@@ -45,12 +47,15 @@ void process_image_data() {
             cam_file.close();
         }
         is_init = true;
+        timestamp_first = data_img[0][0].first*1e-9; // to seconds;
     }
     if(num_cams == 2)
         assert(data_img[0].size() == data_img[1].size());
-    
+
     unsigned int imgs_size = data_img[0].size();
     for(int i = 0; i < imgs_size; ++i) {
+        auto start = std::chrono::system_clock::now();
+
         mynt::Image imgs[num_cams];
         for(int j=0; j<num_cams; ++j) {
             imgs[j].time_stamp = data_img[j][i].first*1e-9; // to seconds;
@@ -64,9 +69,12 @@ void process_image_data() {
             // cv::waitKey(20);
         }
 
-        system_ptr->stereo_callback(imgs[0], imgs[1]);
+        system_ptr->stereo_callback(imgs[0], imgs[1]); // ~25ms
 
-        usleep(50000);
+        auto end = std::chrono::system_clock::now();
+        std::chrono::duration<double> elapsed_seconds = end-start;
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(int((0.05-elapsed_seconds.count())*1e3)));
     }
 }
 
@@ -78,7 +86,10 @@ void process_imu_data() {
     }
     std::string line;
     std::getline(imu_file, line);
+
     while(std::getline(imu_file, line)) {
+        auto start = std::chrono::system_clock::now();
+
         std::stringstream stream(line);
         std::string s;
         std::getline(stream, s, ',');
@@ -102,11 +113,28 @@ void process_imu_data() {
         imu->angular_velocity = gyr;
         imu->linear_acceleration = acc;
 
+        if(imu->time_stamp < timestamp_first) {
+            continue;
+        }
+
         system_ptr->imu_callback(imu);
 
-        usleep(5000);
+        auto end = std::chrono::system_clock::now();
+        std::chrono::duration<double> elapsed_seconds = end-start;
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(int((0.005-elapsed_seconds.count())*1e3)));
     }
     imu_file.close();
+}
+
+void process_backend() {
+    while(true) {
+        auto start = std::chrono::system_clock::now();
+        system_ptr->backend_callback();
+        auto end = std::chrono::system_clock::now();
+        std::chrono::duration<double> elapsed_seconds = end - start;
+        std::this_thread::sleep_for(std::chrono::milliseconds(int((0.05 - elapsed_seconds.count()) * 1e3)));
+    }
 }
 
 int main() {
@@ -116,7 +144,7 @@ int main() {
 
     system_ptr.reset(new mynt::System(file_cam_imu));
 
-    std::thread thd_backend(&mynt::System::backend_callback, system_ptr);
+    std::thread thd_backend(process_backend);
     std::thread thd_image_data(process_image_data);
     std::thread thd_imu_data(process_imu_data);
     std::thread thd_draw(&mynt::System::draw, system_ptr);

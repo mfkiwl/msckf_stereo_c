@@ -4,6 +4,8 @@
 
 #include "system.h"
 
+#include <thread>
+
 #include <pangolin/pangolin.h>
 using namespace pangolin;
 
@@ -56,13 +58,10 @@ namespace mynt {
     }
 
     void System::backend_callback() {
-        while(is_start_backend_) {
-            mt_feature_.lock();
-            msckfvio_ptr_->featureCallback(feature_msg_ptr_);
-            path_to_draw_ = msckfvio_ptr_->get_path();
-            mt_feature_.unlock();
-            usleep(65000);
-        }
+        mt_feature_.lock();
+        msckfvio_ptr_->featureCallback(feature_msg_ptr_);
+        path_to_draw_ = msckfvio_ptr_->get_path();
+        mt_feature_.unlock();
     }
 
     void System::draw() {
