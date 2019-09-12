@@ -23,7 +23,7 @@ namespace mynt {
 
         void backend_callback();
 
-        void draw();
+        std::vector<Eigen::Vector3d> path_to_draw_;
 
         typedef boost::shared_ptr<System> Ptr;
         typedef boost::shared_ptr<const System> ConstPtr;
@@ -33,14 +33,8 @@ namespace mynt {
 
         boost::shared_ptr<CameraMeasurement> feature_msg_ptr_;
 
-        std::vector<Eigen::Vector3d> path_to_draw_;
-
         mynt::ImageProcessorPtr imgproc_ptr_;
         mynt::MsckfVioPtr msckfvio_ptr_;
-
-        bool is_start_backend_;
-
-        std::mutex mt_feature_;
     };
 
     typedef System::Ptr SystemPtr;

@@ -57,7 +57,6 @@ namespace mynt {
 
     bool MsckfVio::loadParameters() {
         YAML::Node cfg_msckfvio = YAML::LoadFile("../config/app_msckfvio.yaml");
-
         frame_rate = cfg_msckfvio["frame_rate"].as<double>();
         position_std_threshold = cfg_msckfvio["position_std_threshold"].as<double>();
         rotation_threshold = cfg_msckfvio["rotation_threshold"].as<double>();
@@ -1310,7 +1309,7 @@ namespace mynt {
                       << v3_t[0] << " " << v3_t[1] << " " << v3_t[2] << " "
                       << q4_r.x() << " " << q4_r.y() << " " << q4_r.z() << " " << q4_r.w() << std::endl;
 
-//        std::cout << std::fixed << time_stamp << " " << v3_t[0] << " " << v3_t[1] << " " << v3_t[2] << std::endl;
+        std::cout << std::fixed << time_stamp << " " << v3_t[0] << " " << v3_t[1] << " " << v3_t[2] << std::endl;
 
         // Convert the covariance.
         Matrix3d P_oo = state_server.state_cov.block<3, 3>(0, 0);

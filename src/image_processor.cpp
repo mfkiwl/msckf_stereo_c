@@ -35,7 +35,7 @@ namespace mynt {
     }
 
     ImageProcessor::~ImageProcessor() {
-        destroyAllWindows();
+        //destroyAllWindows();
         //ROS_INFO("Feature lifetime statistics:");
         //featureLifetimeStatistics();
         return;

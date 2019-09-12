@@ -4,7 +4,7 @@ project(msckf_vio_mynt)
 
 set(CMAKE_BUILD_TYPE "Release")
 set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_FLAGS "-O3")
+set(CMAKE_CXX_FLAGS "-O3 -g")
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake_modules")
 
@@ -53,6 +53,9 @@ set(LIB_LIST ${OpenCV_LIBS} ${Boost_LIBRARIES} -lpthread ${LAPACK_LIBRARIES} ${C
 
 add_executable(run_euroc src/apps/run_euroc.cpp ${SRC_LIST})
 target_link_libraries(run_euroc ${LIB_LIST})
+
+add_executable(run_euroc_nothread src/apps/run_euroc_nothread.cpp ${SRC_LIST})
+target_link_libraries(run_euroc_nothread ${LIB_LIST})
 
 # Unit Test
 enable_testing()
