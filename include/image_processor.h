@@ -11,11 +11,13 @@
 #include <vector>
 #include <map>
 
-#include <opencv2/opencv.hpp>
-#include <opencv2/video.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/features2d.hpp>
 
-#include "common.h"
-#include "config_io.h"
+#include "common/data_msg.h"
+#include "common/config_io.h"
 
 namespace mynt {
 

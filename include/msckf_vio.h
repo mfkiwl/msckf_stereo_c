@@ -17,10 +17,10 @@
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 
-#include "common.h"
-#include "config_io.h"
-#include "imu_state.h"
-#include "cam_state.h"
+#include "common/data_msg.h"
+#include "common/config_io.h"
+#include "common/imu_state.h"
+#include "common/cam_state.h"
 #include "feature.hpp"
 
 namespace mynt {

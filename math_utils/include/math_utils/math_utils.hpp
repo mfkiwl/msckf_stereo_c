@@ -9,9 +9,18 @@
 #define MSCKF_VIO_MATH_UTILS_HPP
 
 #include <cmath>
+#include <random>
+
 #include <Eigen/Dense>
 
 namespace mynt {
+
+    inline int uniform_integer(int min, int max) {
+        std::random_device rd;  //Will be used to obtain a seed for the random number engine
+        std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+        std::uniform_int_distribution<> dis(min, max);
+        return dis(gen);
+    }
 
     inline Eigen::Isometry3d matrix4d_to_isometry3d(const Eigen::Matrix4d &m4) {
         Eigen::Isometry3d T;
@@ -28,27 +37,6 @@ namespace mynt {
         T.translation()(1) = m4(1, 3);
         T.translation()(2) = m4(2, 3);
         return T;
-    }
-
-    inline cv::Mat matrix4d_to_cvmat(const Eigen::Matrix4d &m4) {
-        cv::Mat c(4,4,CV_64FC1);
-        c.at<double>(0, 0) = m4(0, 0);
-        c.at<double>(0, 1) = m4(0, 1);
-        c.at<double>(0, 2) = m4(0, 2);
-        c.at<double>(1, 0) = m4(1, 0);
-        c.at<double>(1, 1) = m4(1, 1);
-        c.at<double>(1, 2) = m4(1, 2);
-        c.at<double>(2, 0) = m4(2, 0);
-        c.at<double>(2, 1) = m4(2, 1);
-        c.at<double>(2, 2) = m4(2, 2);
-        c.at<double>(0, 3) = m4(0, 3);
-        c.at<double>(1, 3) = m4(1, 3);
-        c.at<double>(2, 3) = m4(2, 3);
-        c.at<double>(3, 0) = m4(3, 0);
-        c.at<double>(3, 1) = m4(3, 1);
-        c.at<double>(3, 2) = m4(3, 2);
-        c.at<double>(3, 3) = m4(3, 3);
-        return c;
     }
 
     /*

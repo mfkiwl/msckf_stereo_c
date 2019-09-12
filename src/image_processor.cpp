@@ -12,15 +12,37 @@
 #include <set>
 
 #include <Eigen/Dense>
+#include <opencv2/calib3d.hpp>
+#include <opencv2/video.hpp>
 
-#include "random_numbers.h"
-#include "math_utils.hpp"
+#include "math_utils/math_utils.hpp"
 
 using namespace std;
 using namespace cv;
 using namespace Eigen;
 
 namespace mynt {
+
+    inline cv::Mat matrix4d_to_cvmat(const Eigen::Matrix4d &m4) {
+        cv::Mat c(4,4,CV_64FC1);
+        c.at<double>(0, 0) = m4(0, 0);
+        c.at<double>(0, 1) = m4(0, 1);
+        c.at<double>(0, 2) = m4(0, 2);
+        c.at<double>(1, 0) = m4(1, 0);
+        c.at<double>(1, 1) = m4(1, 1);
+        c.at<double>(1, 2) = m4(1, 2);
+        c.at<double>(2, 0) = m4(2, 0);
+        c.at<double>(2, 1) = m4(2, 1);
+        c.at<double>(2, 2) = m4(2, 2);
+        c.at<double>(0, 3) = m4(0, 3);
+        c.at<double>(1, 3) = m4(1, 3);
+        c.at<double>(2, 3) = m4(2, 3);
+        c.at<double>(3, 0) = m4(3, 0);
+        c.at<double>(3, 1) = m4(3, 1);
+        c.at<double>(3, 2) = m4(3, 2);
+        c.at<double>(3, 3) = m4(3, 3);
+        return c;
+    }
 
     ImageProcessor::ImageProcessor(YAML::Node cfg_cam_imu) :
             cfg_cam_imu_(cfg_cam_imu),
@@ -1030,16 +1052,15 @@ namespace mynt {
 
         vector<int> best_inlier_set;
         double best_error = 1e10;
-        random_numbers::RandomNumberGenerator random_gen;
+//        random_numbers::RandomNumberGenerator random_gen;
 
         for (int iter_idx = 0; iter_idx < iter_num; ++iter_idx) {
             // Randomly select two point pairs.
-            // Although this is a weird way of selecting two pairs, but it
-            // is able to efficiently avoid selecting repetitive pairs.
-            int select_idx1 = random_gen.uniformInteger(
-                    0, raw_inlier_idx.size() - 1);
-            int select_idx_diff = random_gen.uniformInteger(
-                    1, raw_inlier_idx.size() - 1);
+            // Although this is a weird way of selecting two pairs, but it is able to efficiently avoid selecting repetitive pairs.
+//            int select_idx1     = random_gen.uniformInteger(0, raw_inlier_idx.size() - 1);
+//            int select_idx_diff = random_gen.uniformInteger(1, raw_inlier_idx.size() - 1);
+            int select_idx1     = mynt::uniform_integer(0, raw_inlier_idx.size() - 1);
+            int select_idx_diff = mynt::uniform_integer(1, raw_inlier_idx.size() - 1);
             int select_idx2 = select_idx1 + select_idx_diff < raw_inlier_idx.size() ?
                               select_idx1 + select_idx_diff :
                               select_idx1 + select_idx_diff - raw_inlier_idx.size();
