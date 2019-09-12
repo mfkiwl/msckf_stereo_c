@@ -12,7 +12,7 @@ endif()
 
 include_directories(include)
 
-add_library(math_utils SHARED src/random_numbers.cpp)
+add_library(math_utils SHARED src/random_numbers.cpp src/matrix.cpp)
 
 # Unit Test
 if(UnitTest)
