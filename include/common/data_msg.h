@@ -2,8 +2,8 @@
 // Created by cg on 8/20/19.
 //
 
-#ifndef MSCKF_VIO_MYNT_COMMON_H
-#define MSCKF_VIO_MYNT_COMMON_H
+#ifndef MSCKF_VIO_MYNT_DATA_MSG_H
+#define MSCKF_VIO_MYNT_DATA_MSG_H
 
 #include <boost/shared_ptr.hpp>
 
@@ -55,4 +55,4 @@ namespace mynt {
     };
 }
 
-#endif //MSCKF_VIO_MYNT_COMMON_H
+#endif //MSCKF_VIO_MYNT_DATA_MSG_H

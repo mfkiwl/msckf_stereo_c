@@ -1,4 +1,4 @@
-#include "config_io.h"
+#include "common/config_io.h"
 
 #include <gtest/gtest.h>
 #include <opencv2/core.hpp>

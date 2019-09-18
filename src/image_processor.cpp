@@ -12,15 +12,38 @@
 #include <set>
 
 #include <Eigen/Dense>
+#include <opencv2/calib3d.hpp>
+#include <opencv2/video.hpp>
 
-#include "random_numbers.h"
-#include "math_utils.hpp"
+#include "math_utils/math_utils.hpp"
 
 using namespace std;
 using namespace cv;
 using namespace Eigen;
 
 namespace mynt {
+
+    inline cv::Mat matrix3d_to_cvmat(const Eigen::Matrix3d &m3) {
+        cv::Mat c(3,3,CV_64FC1);
+        c.at<double>(0, 0) = m3(0, 0);
+        c.at<double>(0, 1) = m3(0, 1);
+        c.at<double>(0, 2) = m3(0, 2);
+        c.at<double>(1, 0) = m3(1, 0);
+        c.at<double>(1, 1) = m3(1, 1);
+        c.at<double>(1, 2) = m3(1, 2);
+        c.at<double>(2, 0) = m3(2, 0);
+        c.at<double>(2, 1) = m3(2, 1);
+        c.at<double>(2, 2) = m3(2, 2);
+        return c;
+    }
+
+    inline cv::Vec3d vector3d_to_cvvec3d(const Eigen::Vector3d &v3) {
+        cv::Vec3d c(3,CV_64FC1);
+        c[0] = v3[0];
+        c[1] = v3[1];
+        c[2] = v3[2];
+        return c;
+    }
 
     ImageProcessor::ImageProcessor(YAML::Node cfg_cam_imu) :
             cfg_cam_imu_(cfg_cam_imu),
@@ -35,7 +58,7 @@ namespace mynt {
     }
 
     ImageProcessor::~ImageProcessor() {
-        destroyAllWindows();
+        //destroyAllWindows();
         //ROS_INFO("Feature lifetime statistics:");
         //featureLifetimeStatistics();
         return;
@@ -79,21 +102,17 @@ namespace mynt {
         cam1_distortion_coeffs[3] = cam1_distortion_coeffs_temp[3];
 
         Eigen::Matrix4d m4_cam0_imu = cfg_cam_imu_["cam0"]["T_cam_imu"].as<Eigen::Matrix4d>();
-        cv::Mat T_imu_cam0 = matrix4d_to_cvmat(m4_cam0_imu); // 坐标系变换
+        Isometry3d T_imu_cam0 = matrix4d_to_isometry3d(m4_cam0_imu); // 坐标系变换
 
-        cv::Matx33d R_imu_cam0(T_imu_cam0(cv::Rect(0, 0, 3, 3)));
-        cv::Vec3d t_imu_cam0 = T_imu_cam0(cv::Rect(3, 0, 1, 3));
-        R_cam0_imu = R_imu_cam0.t();
-        t_cam0_imu = -R_imu_cam0.t() * t_imu_cam0;
+        R_cam0_imu =  T_imu_cam0.linear().transpose();
+        t_cam0_imu = -T_imu_cam0.linear().transpose() * T_imu_cam0.translation();
 
         Eigen::Matrix4d m4_cam1_cam0 = cfg_cam_imu_["cam1"]["T_cn_cnm1"].as<Eigen::Matrix4d>();
-        cv::Mat T_cam0_cam1 = matrix4d_to_cvmat(m4_cam1_cam0); // 坐标系变换
+        Isometry3d T_cam0_cam1 = matrix4d_to_isometry3d(m4_cam1_cam0); // 坐标系变换
 
-        cv::Mat T_imu_cam1 = T_cam0_cam1 * T_imu_cam0; // 右乘
-        cv::Matx33d R_imu_cam1(T_imu_cam1(cv::Rect(0, 0, 3, 3)));
-        cv::Vec3d t_imu_cam1 = T_imu_cam1(cv::Rect(3, 0, 1, 3));
-        R_cam1_imu = R_imu_cam1.t();
-        t_cam1_imu = -R_imu_cam1.t() * t_imu_cam1;
+        Isometry3d T_imu_cam1 = T_cam0_cam1 * T_imu_cam0; // 右乘
+        R_cam1_imu =  T_imu_cam1.linear().transpose();
+        t_cam1_imu = -T_imu_cam1.linear().transpose() * T_imu_cam1.translation();
 
         // Processor parameters
         YAML::Node cfg_imgproc = YAML::LoadFile("../config/app_imgproc.yaml");
@@ -125,9 +144,6 @@ namespace mynt {
             cam1_distortion_coeffs[0], cam1_distortion_coeffs[1],
             cam1_distortion_coeffs[2], cam1_distortion_coeffs[3]);
 
-        cout << R_imu_cam0 << endl;
-        cout << t_imu_cam0.t() << endl;
-
         printf("grid_row: %d\n", processor_config.grid_row);
         printf("grid_col: %d\n", processor_config.grid_col);
         printf("grid_min_feature_num: %d\n", processor_config.grid_min_feature_num);
@@ -140,8 +156,8 @@ namespace mynt {
         printf("ransac_threshold: %f\n", processor_config.ransac_threshold);
         printf("stereo_threshold: %f\n", processor_config.stereo_threshold);
 
-        std::cout << "T_imu_cam0:\n" << T_imu_cam0 << std::endl;
-        std::cout << "T_cam0_cam1:\n" << T_cam0_cam1 << std::endl;
+        std::cout << "T_imu_cam0:\n"  << T_imu_cam0.matrix()  << std::endl;
+        std::cout << "T_cam0_cam1:\n" << T_cam0_cam1.matrix() << std::endl;
         std::cout << "R_cam1_imu:\n" << R_cam1_imu << std::endl;
         std::cout << "t_cam1_imu:\n" << t_cam1_imu << std::endl;
 
@@ -554,11 +570,11 @@ namespace mynt {
         if (cam1_points.size() == 0) {
             // Initialize cam1_points by projecting cam0_points to cam1 using the
             // rotation from stereo extrinsics
-            const cv::Matx33d R_cam0_cam1 = R_cam1_imu.t() * R_cam0_imu;
+            const Eigen::Matrix3d R_cam0_cam1 = R_cam1_imu.transpose() * R_cam0_imu;
             vector<cv::Point2f> cam0_points_undistorted;
             undistortPoints(cam0_points, cam0_intrinsics, cam0_distortion_model,
                             cam0_distortion_coeffs, cam0_points_undistorted,
-                            R_cam0_cam1);
+                            matrix3d_to_cvmat(R_cam0_cam1));
             cam1_points = distortPoints(cam0_points_undistorted, cam1_intrinsics,
                                         cam1_distortion_model, cam1_distortion_coeffs);
         }
@@ -587,14 +603,11 @@ namespace mynt {
 
         // Compute the relative rotation between the cam0
         // frame and cam1 frame.
-        const cv::Matx33d R_cam0_cam1 = R_cam1_imu.t() * R_cam0_imu;
-        const cv::Vec3d t_cam0_cam1 = R_cam1_imu.t() * (t_cam0_imu - t_cam1_imu);
+        const Eigen::Matrix3d R_cam0_cam1 = R_cam1_imu.transpose() *  R_cam0_imu;
+        const Eigen::Vector3d t_cam0_cam1 = R_cam1_imu.transpose() * (t_cam0_imu - t_cam1_imu);
         // Compute the essential matrix.
-        const cv::Matx33d t_cam0_cam1_hat(
-                0.0, -t_cam0_cam1[2], t_cam0_cam1[1],
-                t_cam0_cam1[2], 0.0, -t_cam0_cam1[0],
-                -t_cam0_cam1[1], t_cam0_cam1[0], 0.0);
-        const cv::Matx33d E = t_cam0_cam1_hat * R_cam0_cam1;
+        const Eigen::Matrix3d t_cam0_cam1_hat = mynt::skewSymmetric(t_cam0_cam1);
+        const cv::Matx33d E = matrix3d_to_cvmat(t_cam0_cam1_hat * R_cam0_cam1);
 
         // Further remove outliers based on the known
         // essential matrix.
@@ -613,10 +626,8 @@ namespace mynt {
 
         for (int i = 0; i < cam0_points_undistorted.size(); ++i) {
             if (inlier_markers[i] == 0) continue;
-            cv::Vec3d pt0(cam0_points_undistorted[i].x,
-                          cam0_points_undistorted[i].y, 1.0);
-            cv::Vec3d pt1(cam1_points_undistorted[i].x,
-                          cam1_points_undistorted[i].y, 1.0);
+            cv::Vec3d pt0(cam0_points_undistorted[i].x, cam0_points_undistorted[i].y, 1.0);
+            cv::Vec3d pt1(cam1_points_undistorted[i].x, cam1_points_undistorted[i].y, 1.0);
             cv::Vec3d epipolar_line = E * pt0;
             double error = fabs((pt1.t() * epipolar_line)[0]) / sqrt(
                     epipolar_line[0] * epipolar_line[0] +
@@ -870,17 +881,17 @@ namespace mynt {
         }
 
         // Compute the mean angular velocity in the IMU frame.
-        Vec3f mean_ang_vel(0.0, 0.0, 0.0);
+        Eigen::Vector3d mean_ang_vel(0.0, 0.0, 0.0);
         for (auto iter = begin_iter; iter < end_iter; ++iter)
-            mean_ang_vel += Vec3f(iter->angular_velocity[0], iter->angular_velocity[1], iter->angular_velocity[2]);
+            mean_ang_vel += Eigen::Vector3d(iter->angular_velocity[0], iter->angular_velocity[1], iter->angular_velocity[2]);
 
         if (end_iter - begin_iter > 0)
             mean_ang_vel *= 1.0f / (end_iter - begin_iter);
 
         // Transform the mean angular velocity from the IMU
         // frame to the cam0 and cam1 frames.
-        Vec3f cam0_mean_ang_vel = R_cam0_imu.t() * mean_ang_vel;
-        Vec3f cam1_mean_ang_vel = R_cam1_imu.t() * mean_ang_vel;
+        Vec3f cam0_mean_ang_vel = vector3d_to_cvvec3d(R_cam0_imu.transpose() * mean_ang_vel);
+        Vec3f cam1_mean_ang_vel = vector3d_to_cvvec3d(R_cam1_imu.transpose() * mean_ang_vel);
 
         // Compute the relative rotation.
         double dtime = cam0_curr_img_ptr->time_stamp - cam0_prev_img_ptr->time_stamp;
@@ -1030,16 +1041,15 @@ namespace mynt {
 
         vector<int> best_inlier_set;
         double best_error = 1e10;
-        random_numbers::RandomNumberGenerator random_gen;
+//        random_numbers::RandomNumberGenerator random_gen;
 
         for (int iter_idx = 0; iter_idx < iter_num; ++iter_idx) {
             // Randomly select two point pairs.
-            // Although this is a weird way of selecting two pairs, but it
-            // is able to efficiently avoid selecting repetitive pairs.
-            int select_idx1 = random_gen.uniformInteger(
-                    0, raw_inlier_idx.size() - 1);
-            int select_idx_diff = random_gen.uniformInteger(
-                    1, raw_inlier_idx.size() - 1);
+            // Although this is a weird way of selecting two pairs, but it is able to efficiently avoid selecting repetitive pairs.
+//            int select_idx1     = random_gen.uniformInteger(0, raw_inlier_idx.size() - 1);
+//            int select_idx_diff = random_gen.uniformInteger(1, raw_inlier_idx.size() - 1);
+            int select_idx1     = mynt::uniform_integer(0, raw_inlier_idx.size() - 1);
+            int select_idx_diff = mynt::uniform_integer(1, raw_inlier_idx.size() - 1);
             int select_idx2 = select_idx1 + select_idx_diff < raw_inlier_idx.size() ?
                               select_idx1 + select_idx_diff :
                               select_idx1 + select_idx_diff - raw_inlier_idx.size();

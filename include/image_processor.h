@@ -11,11 +11,13 @@
 #include <vector>
 #include <map>
 
-#include <opencv2/opencv.hpp>
-#include <opencv2/video.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/features2d.hpp>
 
-#include "common.h"
-#include "config_io.h"
+#include "common/data_msg.h"
+#include "common/config_io.h"
 
 namespace mynt {
 
@@ -347,11 +349,11 @@ namespace mynt {
         cv::Vec4d cam1_distortion_coeffs;
 
         // Take a vector from cam0 frame to the IMU frame.
-        cv::Matx33d R_cam0_imu;
-        cv::Vec3d t_cam0_imu;
+        Eigen::Matrix3d R_cam0_imu;
+        Eigen::Vector3d t_cam0_imu;
         // Take a vector from cam1 frame to the IMU frame.
-        cv::Matx33d R_cam1_imu;
-        cv::Vec3d t_cam1_imu;
+        Eigen::Matrix3d R_cam1_imu;
+        Eigen::Vector3d t_cam1_imu;
 
         // Previous and current images
         boost::shared_ptr<mynt::Image> cam0_prev_img_ptr;

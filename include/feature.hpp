@@ -16,9 +16,9 @@
 #include <Eigen/Geometry>
 #include <Eigen/StdVector>
 
-#include "math_utils.hpp"
-#include "imu_state.h"
-#include "cam_state.h"
+#include "math_utils/math_utils.hpp"
+#include "common/imu_state.h"
+#include "common/cam_state.h"
 
 namespace mynt {
 
