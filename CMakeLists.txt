@@ -4,6 +4,8 @@ project(msckf_vio_mynt)
 
 option(BUILD_TEST "build unit test" OFF)
 
+set(N_CORES 3 CACHE STRING "Using N number of cores for parallel build")
+
 set(CMAKE_BUILD_TYPE "Release")
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_FLAGS "-O3 -g")
@@ -47,12 +49,33 @@ if(Pangolin_FOUND)
     link_libraries(${Pangolin_LIBRARIES})
 endif()
 
-add_subdirectory(mynt_basic_algthms)
+# mynt_basic_algthms
+include(ExternalProject)
+ExternalProject_Add(mynt_basic_algthms_external
+        GIT_REPOSITORY http://gitlab.mynt.com/mynt-common-algorithms/mynt_basic_algthms.git
+        GIT_TAG master
+        UPDATE_COMMAND ""
+        INSTALL_DIR ${CMAKE_BINARY_DIR}
+        CMAKE_ARGS
+            -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
+            -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
+            -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
+        PREFIX ${CMAKE_CURRENT_BINARY_DIR}/mynt_basic_algthms
+        BUILD_IN_SOURCE 0
+        BUILD_COMMAND make -j${N_CORES}
+        INSTALL_COMMAND make install
+)
+ExternalProject_Get_Property(mynt_basic_algthms_external INSTALL_DIR)
+include_directories(${INSTALL_DIR}/include)
+link_directories(${INSTALL_DIR}/lib)
+add_library(mynt_maths SHARED IMPORTED)
+set(MYNT_BASIC_ALGTHMS_LIBRARIES mynt_maths)
+add_dependencies(${MYNT_BASIC_ALGTHMS_LIBRARIES} mynt_basic_algthms_external)
 
-include_directories(include mynt_basic_algthms/include)
+include_directories(include)
 
 set(SRC_LIST src/image_processor.cpp src/msckf_vio.cpp src/system.cpp)
-set(LIB_LIST mynt_maths pthread)
+set(LIB_LIST pthread)
 
 add_executable(run_euroc src/apps/run_euroc.cpp ${SRC_LIST})
 target_link_libraries(run_euroc ${LIB_LIST})
@@ -60,7 +83,7 @@ target_link_libraries(run_euroc ${LIB_LIST})
 add_executable(run_euroc_nothread src/apps/run_euroc_nothread.cpp ${SRC_LIST})
 target_link_libraries(run_euroc_nothread ${LIB_LIST})
 
-# Unit Test
+# unit test
 if(BUILD_TEST)
     enable_testing()
     find_package(GTest)
