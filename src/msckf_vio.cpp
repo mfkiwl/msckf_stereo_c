@@ -22,7 +22,7 @@
 
 #include <Eigen/SPQRSupport>
 
-#include "math_utils/math_utils.hpp"
+#include "math_utils.hpp"
 
 using namespace std;
 using namespace Eigen;

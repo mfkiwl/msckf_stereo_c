@@ -15,7 +15,8 @@
 #include <opencv2/calib3d.hpp>
 #include <opencv2/video.hpp>
 
-#include "math_utils/math_utils.hpp"
+#include "maths/math_basics.h"
+#include "math_utils.hpp"
 
 using namespace std;
 using namespace cv;

@@ -10,20 +10,9 @@ set(CMAKE_CXX_FLAGS "-O3 -g")
 
 set(CMAKE_MODULE_PATH APPEND "${CMAKE_SOURCE_DIR}/cmake_modules")
 
-find_package(Boost REQUIRED COMPONENTS system)
-if(Boost_FOUND)
-    include_directories(${Boost_INCLUDE_DIR})
-    link_directories(${Boost_LIBRARY_DIR})
-endif()
-
 find_package(SuiteSparse REQUIRED)
 if(SuiteSparse_FOUND)
     include_directories(${SUITESPARSE_INCLUDE_DIRS})
-endif()
-
-find_package(Eigen3 REQUIRED)
-if(Eigen3_FOUND)
-    include_directories(${EIGEN3_INCLUDE_DIR})
 endif()
 
 find_package(Cholmod)
@@ -32,6 +21,11 @@ if(CHOLMOD_FOUND)
     include_directories(${CHOLMOD_INCLUDES})
     set(CHOLMOD_ALL_LIBS  ${CHOLMOD_LIBRARIES} ${EIGEN_BLAS_LIBRARIES} ${EIGEN_LAPACK_LIBRARIES})
     link_libraries(spqr ${LAPACK_LIBRARIES} ${CHOLMOD_ALL_LIBS})
+endif()
+
+find_package(Eigen3 REQUIRED)
+if(Eigen3_FOUND)
+    include_directories(${EIGEN3_INCLUDE_DIR})
 endif()
 
 find_package(OpenCV REQUIRED COMPONENTS core highgui imgproc features2d calib3d video)
@@ -53,12 +47,12 @@ if(Pangolin_FOUND)
     link_libraries(${Pangolin_LIBRARIES})
 endif()
 
-add_subdirectory(math_utils)
+add_subdirectory(mynt_basic_algthms)
 
-include_directories(include math_utils/include)
+include_directories(include mynt_basic_algthms/include)
 
 set(SRC_LIST src/image_processor.cpp src/msckf_vio.cpp src/system.cpp)
-set(LIB_LIST math_utils pthread)
+set(LIB_LIST mynt_maths pthread)
 
 add_executable(run_euroc src/apps/run_euroc.cpp ${SRC_LIST})
 target_link_libraries(run_euroc ${LIB_LIST})

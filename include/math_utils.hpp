@@ -15,13 +15,6 @@
 
 namespace mynt {
 
-    inline int uniform_integer(int min, int max) {
-        std::random_device rd;  //Will be used to obtain a seed for the random number engine
-        std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
-        std::uniform_int_distribution<> dis(min, max);
-        return dis(gen);
-    }
-
     inline Eigen::Isometry3d matrix4d_to_isometry3d(const Eigen::Matrix4d &m4) {
         Eigen::Isometry3d T;
         T.linear()(0, 0)   = m4(0, 0);
