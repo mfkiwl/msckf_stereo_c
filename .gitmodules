@@ -1,3 +1,4 @@
 [submodule "mynt_basic_algthms"]
 	path = mynt_basic_algthms
 	url = http://gitlab.mynt.com/mynt-common-algorithms/mynt_basic_algthms.git
+        branch = master
