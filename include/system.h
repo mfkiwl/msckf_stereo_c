@@ -10,6 +10,7 @@
 
 #include "image_processor.h"
 #include "msckf_vio.h"
+#include "maths/vector.h"
 
 namespace mynt {
     class System {
@@ -23,7 +24,7 @@ namespace mynt {
 
         void backend_callback();
 
-        std::vector<Eigen::Vector3d> path_to_draw_;
+        std::vector<mynt::Vector3> path_to_draw_;
 
         typedef boost::shared_ptr<System> Ptr;
         typedef boost::shared_ptr<const System> ConstPtr;

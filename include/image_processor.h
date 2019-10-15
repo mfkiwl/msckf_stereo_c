@@ -10,6 +10,7 @@
 
 #include <vector>
 #include <map>
+#include <fstream>
 
 #include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
@@ -18,6 +19,9 @@
 
 #include "common/data_msg.h"
 #include "common/config_io.h"
+#include "maths/vector.h"
+#include "cv/types.h"
+#include "kinematics/rotation_matrix.h"
 
 namespace mynt {
 
@@ -95,8 +99,8 @@ namespace mynt {
             FeatureIDType id;
             float response;
             int lifetime;
-            cv::Point2f cam0_point;
-            cv::Point2f cam1_point;
+            mynt::Point2f cam0_point;
+            mynt::Point2f cam1_point;
         };
 
         /*
@@ -219,7 +223,7 @@ namespace mynt {
          * @return cam1_R_p_c: a rotation matrix which takes a vector
          *    from previous cam1 frame to current cam1 frame.
          */
-        void integrateImuData(cv::Matx33f &cam0_R_p_c, cv::Matx33f &cam1_R_p_c);
+        void integrateImuData(mynt::RotationMatrix &cam0_R_p_c, mynt::RotationMatrix &cam1_R_p_c);
 
         /*
          * @brief predictFeatureTracking Compensates the rotation
@@ -235,10 +239,10 @@ namespace mynt {
          * Note that the input and output points are of pixel coordinates.
          */
         void predictFeatureTracking(
-                const std::vector<cv::Point2f> &input_pts,
-                const cv::Matx33f &R_p_c,
-                const cv::Vec4d &intrinsics,
-                std::vector<cv::Point2f> &compenstated_pts);
+                const std::vector<mynt::Point2f> &input_pts,
+                const mynt::RotationMatrix &R_p_c,
+                const mynt::Vector4 &intrinsics,
+                std::vector<mynt::Point2f> &compensated_pts);
 
         /*
          * @brief twoPointRansac Applies two point ransac algorithm
@@ -255,35 +259,32 @@ namespace mynt {
          * @return inlier_flag: 1 for inliers and 0 for outliers.
          */
         void twoPointRansac(
-                const std::vector<cv::Point2f> &pts1,
-                const std::vector<cv::Point2f> &pts2,
-                const cv::Matx33f &R_p_c,
-                const cv::Vec4d &intrinsics,
+                const std::vector<mynt::Point2f> &pts1,
+                const std::vector<mynt::Point2f> &pts2,
+                const mynt::RotationMatrix &R_p_c,
+                const mynt::Vector4 &intrinsics,
                 const std::string &distortion_model,
-                const cv::Vec4d &distortion_coeffs,
+                const mynt::Vector4 &distortion_coeffs,
                 const double &inlier_error,
                 const double &success_probability,
                 std::vector<int> &inlier_markers);
 
         void undistortPoints(
-                const std::vector<cv::Point2f> &pts_in,
-                const cv::Vec4d &intrinsics,
+                const std::vector<mynt::Point2f> &pts_in,
+                const mynt::Vector4 &intrinsics,
                 const std::string &distortion_model,
-                const cv::Vec4d &distortion_coeffs,
-                std::vector<cv::Point2f> &pts_out,
+                const mynt::Vector4 &distortion_coeffs,
+                std::vector<mynt::Point2f> &pts_out,
                 const cv::Matx33d &rectification_matrix = cv::Matx33d::eye(),
                 const cv::Vec4d &new_intrinsics = cv::Vec4d(1, 1, 0, 0));
 
-        void rescalePoints(
-                std::vector<cv::Point2f> &pts1,
-                std::vector<cv::Point2f> &pts2,
-                float &scaling_factor);
+        void rescalePoints(std::vector<mynt::Point2f> &pts1, std::vector<mynt::Point2f> &pts2, float &scaling_factor);
 
-        std::vector<cv::Point2f> distortPoints(
-                const std::vector<cv::Point2f> &pts_in,
-                const cv::Vec4d &intrinsics,
+        std::vector<mynt::Point2f> distortPoints(
+                const std::vector<mynt::Point2f> &pts_in,
+                const mynt::Vector4 &intrinsics,
                 const std::string &distortion_model,
-                const cv::Vec4d &distortion_coeffs);
+                const mynt::Vector4 &distortion_coeffs);
 
         /*
          * @brief stereoMatch Matches features with stereo image pairs.
@@ -292,8 +293,8 @@ namespace mynt {
          * @return inlier_markers: 1 if the match is valid, 0 otherwise.
          */
         void stereoMatch(
-                const std::vector<cv::Point2f> &cam0_points,
-                std::vector<cv::Point2f> &cam1_points,
+                const std::vector<mynt::Point2f> &cam0_points,
+                std::vector<mynt::Point2f> &cam1_points,
                 std::vector<unsigned char> &inlier_markers);
 
         /*
@@ -312,11 +313,11 @@ namespace mynt {
                 const std::vector<unsigned char> &markers,
                 std::vector<T> &refined_vec) {
             if (raw_vec.size() != markers.size()) {
-                printf("The input size of raw_vec(%lu) and markers(%lu) does not match...",
-                         raw_vec.size(), markers.size());
+                printf("The input size of raw_vec(%lu) and markers(%lu) does not match...", raw_vec.size(), markers.size());
             }
             for (int i = 0; i < markers.size(); ++i) {
-                if (markers[i] == 0) continue;
+                if (markers[i] == 0)
+                    continue;
                 refined_vec.push_back(raw_vec[i]);
             }
             return;
@@ -339,21 +340,19 @@ namespace mynt {
 
         // Camera calibration parameters
         std::string cam0_distortion_model;
-        cv::Vec2i cam0_resolution;
-        cv::Vec4d cam0_intrinsics;
-        cv::Vec4d cam0_distortion_coeffs;
+        mynt::Vector4 cam0_intrinsics;
+        mynt::Vector4 cam0_distortion_coeffs;
 
         std::string cam1_distortion_model;
-        cv::Vec2i cam1_resolution;
-        cv::Vec4d cam1_intrinsics;
-        cv::Vec4d cam1_distortion_coeffs;
+        mynt::Vector4 cam1_intrinsics;
+        mynt::Vector4 cam1_distortion_coeffs;
 
         // Take a vector from cam0 frame to the IMU frame.
-        Eigen::Matrix3d R_cam0_imu;
-        Eigen::Vector3d t_cam0_imu;
+        mynt::RotationMatrix R_cam0_imu;
+        mynt::Vector3 t_cam0_imu;
         // Take a vector from cam1 frame to the IMU frame.
-        Eigen::Matrix3d R_cam1_imu;
-        Eigen::Vector3d t_cam1_imu;
+        mynt::RotationMatrix R_cam1_imu;
+        mynt::Vector3 t_cam1_imu;
 
         // Previous and current images
         boost::shared_ptr<mynt::Image> cam0_prev_img_ptr;
@@ -377,6 +376,8 @@ namespace mynt {
 
         // Debugging
         std::map<FeatureIDType, int> feature_lifetime;
+
+        std::ofstream debug_;
 
         void updateFeatureLifetime();
 

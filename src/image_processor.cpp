@@ -8,23 +8,21 @@
 #include "image_processor.h"
 
 #include <iostream>
+#include <iomanip>
 #include <algorithm>
 #include <set>
 
-#include <Eigen/Dense>
+//#include <Eigen/Dense>
 #include <opencv2/calib3d.hpp>
 #include <opencv2/video.hpp>
+#include <kinematics/transform.h>
 
 #include "maths/math_basics.h"
-#include "math_utils.hpp"
-
-using namespace std;
-using namespace cv;
-using namespace Eigen;
+#include "kinematics/convertor.h"
 
 namespace mynt {
 
-    inline cv::Mat matrix3d_to_cvmat(const Eigen::Matrix3d &m3) {
+    inline cv::Mat matrix3_to_cvmat(const mynt::Matrix &m3) {
         cv::Mat c(3,3,CV_64FC1);
         c.at<double>(0, 0) = m3(0, 0);
         c.at<double>(0, 1) = m3(0, 1);
@@ -38,11 +36,12 @@ namespace mynt {
         return c;
     }
 
-    inline cv::Vec3d vector3d_to_cvvec3d(const Eigen::Vector3d &v3) {
-        cv::Vec3d c(3,CV_64FC1);
-        c[0] = v3[0];
-        c[1] = v3[1];
-        c[2] = v3[2];
+    inline cv::Vec4d vector4_to_cvvec4d(const mynt::Vector4 &v4) {
+        cv::Vec4d c(4,CV_64FC1);
+        c[0] = v4[0];
+        c[1] = v4[1];
+        c[2] = v4[2];
+        c[3] = v4[3];
         return c;
     }
 
@@ -62,6 +61,7 @@ namespace mynt {
         //destroyAllWindows();
         //ROS_INFO("Feature lifetime statistics:");
         //featureLifetimeStatistics();
+        debug_.close();
         return;
     }
 
@@ -70,50 +70,22 @@ namespace mynt {
         cam0_distortion_model = cfg_cam_imu_["cam0"]["distortion_model"].as<std::string>();
         cam1_distortion_model = cfg_cam_imu_["cam1"]["distortion_model"].as<std::string>();
 
-        Eigen::Vector2d cam0_resolution_temp = cfg_cam_imu_["cam0"]["resolution"].as<Eigen::Vector2d>();
-        cam0_resolution[0] = cam0_resolution_temp[0];
-        cam0_resolution[1] = cam0_resolution_temp[1];
+        cam0_intrinsics = cfg_cam_imu_["cam0"]["intrinsics"].as<mynt::Vector4>();
+        cam1_intrinsics = cfg_cam_imu_["cam1"]["intrinsics"].as<mynt::Vector4>();
 
-        Eigen::Vector2d cam1_resolution_temp = cfg_cam_imu_["cam1"]["resolution"].as<Eigen::Vector2d>();
-        cam1_resolution[0] = cam1_resolution_temp[0];
-        cam1_resolution[1] = cam1_resolution_temp[1];
+        cam0_distortion_coeffs = cfg_cam_imu_["cam0"]["distortion_coeffs"].as<mynt::Vector4>();
+        cam1_distortion_coeffs = cfg_cam_imu_["cam1"]["distortion_coeffs"].as<mynt::Vector4>();
 
-        Eigen::Vector4d cam0_intrinsics_temp = cfg_cam_imu_["cam0"]["intrinsics"].as<Eigen::Vector4d>();
-        cam0_intrinsics[0] = cam0_intrinsics_temp[0];
-        cam0_intrinsics[1] = cam0_intrinsics_temp[1];
-        cam0_intrinsics[2] = cam0_intrinsics_temp[2];
-        cam0_intrinsics[3] = cam0_intrinsics_temp[3];
+        mynt::EuclideanTransform m4_cam0_imu = cfg_cam_imu_["cam0"]["T_cam_imu"].as<mynt::Mat4>();
 
-        Eigen::Vector4d cam1_intrinsics_temp = cfg_cam_imu_["cam1"]["intrinsics"].as<Eigen::Vector4d>();
-        cam1_intrinsics[0] = cam1_intrinsics_temp[0];
-        cam1_intrinsics[1] = cam1_intrinsics_temp[1];
-        cam1_intrinsics[2] = cam1_intrinsics_temp[2];
-        cam1_intrinsics[3] = cam1_intrinsics_temp[3];
+        R_cam0_imu = m4_cam0_imu.rotation_matrix().transpose(); // 坐标系变换
+        t_cam0_imu = -R_cam0_imu * m4_cam0_imu.translation();
 
-        Eigen::Vector4d cam0_distortion_coeffs_temp = cfg_cam_imu_["cam0"]["distortion_coeffs"].as<Eigen::Vector4d>();
-        cam0_distortion_coeffs[0] = cam0_distortion_coeffs_temp[0];
-        cam0_distortion_coeffs[1] = cam0_distortion_coeffs_temp[1];
-        cam0_distortion_coeffs[2] = cam0_distortion_coeffs_temp[2];
-        cam0_distortion_coeffs[3] = cam0_distortion_coeffs_temp[3];
+        mynt::EuclideanTransform m4_cam1_cam0 = cfg_cam_imu_["cam1"]["T_cn_cnm1"].as<mynt::Mat4>();
 
-        Eigen::Vector4d cam1_distortion_coeffs_temp = cfg_cam_imu_["cam1"]["distortion_coeffs"].as<Eigen::Vector4d>();
-        cam1_distortion_coeffs[0] = cam1_distortion_coeffs_temp[0];
-        cam1_distortion_coeffs[1] = cam1_distortion_coeffs_temp[1];
-        cam1_distortion_coeffs[2] = cam1_distortion_coeffs_temp[2];
-        cam1_distortion_coeffs[3] = cam1_distortion_coeffs_temp[3];
-
-        Eigen::Matrix4d m4_cam0_imu = cfg_cam_imu_["cam0"]["T_cam_imu"].as<Eigen::Matrix4d>();
-        Isometry3d T_imu_cam0 = matrix4d_to_isometry3d(m4_cam0_imu); // 坐标系变换
-
-        R_cam0_imu =  T_imu_cam0.linear().transpose();
-        t_cam0_imu = -T_imu_cam0.linear().transpose() * T_imu_cam0.translation();
-
-        Eigen::Matrix4d m4_cam1_cam0 = cfg_cam_imu_["cam1"]["T_cn_cnm1"].as<Eigen::Matrix4d>();
-        Isometry3d T_cam0_cam1 = matrix4d_to_isometry3d(m4_cam1_cam0); // 坐标系变换
-
-        Isometry3d T_imu_cam1 = T_cam0_cam1 * T_imu_cam0; // 右乘
-        R_cam1_imu =  T_imu_cam1.linear().transpose();
-        t_cam1_imu = -T_imu_cam1.linear().transpose() * T_imu_cam1.translation();
+        mynt::EuclideanTransform T_cam1_imu = m4_cam1_cam0 * m4_cam0_imu;
+        R_cam1_imu = T_cam1_imu.rotation_matrix().transpose();
+        t_cam1_imu = -R_cam1_imu * T_cam1_imu.translation();
 
         // Processor parameters
         YAML::Node cfg_imgproc = YAML::LoadFile("../config/app_imgproc.yaml");
@@ -131,14 +103,12 @@ namespace mynt {
 
         printf("ImageProcessor begin ===========================================\n");
         
-        printf("cam0_resolution: %d, %d\n", cam0_resolution[0], cam0_resolution[1]);
         printf("cam0_intrinscs: %f, %f, %f, %f\n", cam0_intrinsics[0], cam0_intrinsics[1], cam0_intrinsics[2], cam0_intrinsics[3]);
         printf("cam0_distortion_model: %s\n", cam0_distortion_model.c_str());
         printf("cam0_distortion_coefficients: %f, %f, %f, %f\n",
             cam0_distortion_coeffs[0], cam0_distortion_coeffs[1],
             cam0_distortion_coeffs[2], cam0_distortion_coeffs[3]);
 
-        printf("cam1_resolution: %d, %d\n", cam1_resolution[0], cam1_resolution[1]);
         printf("cam1_intrinscs: %f, %f, %f, %f\n", cam1_intrinsics[0], cam1_intrinsics[1], cam1_intrinsics[2], cam1_intrinsics[3]);
         printf("cam1_distortion_model: %s\n", cam1_distortion_model.c_str());
         printf("cam1_distortion_coefficients: %f, %f, %f, %f\n",
@@ -157,8 +127,10 @@ namespace mynt {
         printf("ransac_threshold: %f\n", processor_config.ransac_threshold);
         printf("stereo_threshold: %f\n", processor_config.stereo_threshold);
 
-        std::cout << "T_imu_cam0:\n"  << T_imu_cam0.matrix()  << std::endl;
-        std::cout << "T_cam0_cam1:\n" << T_cam0_cam1.matrix() << std::endl;
+        std::cout << "T_imu_cam0:\n"  << m4_cam0_imu  << std::endl;
+        std::cout << "T_cam0_cam1:\n" << m4_cam1_cam0 << std::endl;
+        std::cout << "R_cam0_imu:\n" << R_cam0_imu << std::endl;
+        std::cout << "t_cam0_imu:\n" << t_cam0_imu << std::endl;
         std::cout << "R_cam1_imu:\n" << R_cam1_imu << std::endl;
         std::cout << "t_cam1_imu:\n" << t_cam1_imu << std::endl;
 
@@ -167,34 +139,13 @@ namespace mynt {
         return true;
     }
 
-//    bool ImageProcessor::createRosIO() {
-//        feature_pub = nh.advertise<CameraMeasurement>(
-//                "features", 3);
-//        tracking_info_pub = nh.advertise<TrackingInfo>(
-//                "tracking_info", 1);
-//        image_transport::ImageTransport it(nh);
-//        debug_stereo_pub = it.advertise("debug_stereo_image", 1);
-//
-//        cam0_img_sub.subscribe(nh, "cam0_image", 10);
-//        cam1_img_sub.subscribe(nh, "cam1_image", 10);
-//        stereo_sub.connectInput(cam0_img_sub, cam1_img_sub);
-//        stereo_sub.registerCallback(&ImageProcessor::stereoCallback, this);
-//        imu_sub = nh.subscribe("imu", 50, &ImageProcessor::imuCallback, this);
-//
-//        return true;
-//    }
-
     bool ImageProcessor::initialize() {
         if (!loadParameters())
             return false;
         std::cout << "Finish loading parameters..." << std::endl;
+        detector_ptr = cv::FastFeatureDetector::create(processor_config.fast_threshold);
 
-        // Create feature detector.
-        detector_ptr = FastFeatureDetector::create(processor_config.fast_threshold);
-
-//        if (!createRosIO())
-//            return false;
-//        std::cout << "Finish creating ROS IO..." << std::endl;
+        debug_.open("debug_imageprocessor.txt");
 
         return true;
     }
@@ -213,6 +164,7 @@ namespace mynt {
         // Detect features in the first frame.
         if (is_first_img) {
             initializeFirstFrame();
+
             is_first_img = false;
             // Draw results.
             drawFeaturesStereo();
@@ -240,7 +192,7 @@ namespace mynt {
         // Initialize the current features to empty vectors.
         curr_features_ptr.reset(new GridFeatures());
         for (int code = 0; code < processor_config.grid_row * processor_config.grid_col; ++code) {
-            (*curr_features_ptr)[code] = vector<FeatureMetaData>(0);
+            (*curr_features_ptr)[code] = std::vector<FeatureMetaData>(0);
         }
 
         return;
@@ -255,46 +207,46 @@ namespace mynt {
     }
 
     void ImageProcessor::createImagePyramids() {
-        const Mat &curr_cam0_img = cam0_curr_img_ptr->image;
-        buildOpticalFlowPyramid(
+        const cv::Mat &curr_cam0_img = cam0_curr_img_ptr->image;
+        cv::buildOpticalFlowPyramid(
                 curr_cam0_img, curr_cam0_pyramid_,
-                Size(processor_config.patch_size, processor_config.patch_size),
-                processor_config.pyramid_levels, true, BORDER_REFLECT_101,
-                BORDER_CONSTANT, false);
+                cv::Size(processor_config.patch_size, processor_config.patch_size),
+                processor_config.pyramid_levels, true, cv::BORDER_REFLECT_101,
+                cv::BORDER_CONSTANT, false);
 
-        const Mat &curr_cam1_img = cam1_curr_img_ptr->image;
-        buildOpticalFlowPyramid(
+        const cv::Mat &curr_cam1_img = cam1_curr_img_ptr->image;
+        cv::buildOpticalFlowPyramid(
                 curr_cam1_img, curr_cam1_pyramid_,
-                Size(processor_config.patch_size, processor_config.patch_size),
-                processor_config.pyramid_levels, true, BORDER_REFLECT_101,
-                BORDER_CONSTANT, false);
+                cv::Size(processor_config.patch_size, processor_config.patch_size),
+                processor_config.pyramid_levels, true, cv::BORDER_REFLECT_101,
+                cv::BORDER_CONSTANT, false);
     }
 
     void ImageProcessor::initializeFirstFrame() {
         // Size of each grid.
-        const Mat &img = cam0_curr_img_ptr->image;
+        const cv::Mat &img = cam0_curr_img_ptr->image;
         static int grid_height = img.rows / processor_config.grid_row;
-        static int grid_width = img.cols / processor_config.grid_col;
+        static int grid_width  = img.cols / processor_config.grid_col;
 
         // Detect new features on the frist image.
-        vector<KeyPoint> new_features(0);
+        std::vector<cv::KeyPoint> new_features(0);
         detector_ptr->detect(img, new_features);
 
-        // Find the stereo matched points for the newly
-        // detected features.
-        vector<cv::Point2f> cam0_points(new_features.size());
+        // Find the stereo matched points for the newly detected features.
+        std::vector<mynt::Point2f> cam0_points(new_features.size());
         for (int i = 0; i < new_features.size(); ++i)
-            cam0_points[i] = new_features[i].pt;
+            cam0_points[i] = mynt::Point2f(new_features[i].pt.x, new_features[i].pt.y);
 
-        vector<cv::Point2f> cam1_points(0);
-        vector<unsigned char> inlier_markers(0);
+        std::vector<mynt::Point2f> cam1_points(0);
+        std::vector<unsigned char> inlier_markers(0);
         stereoMatch(cam0_points, cam1_points, inlier_markers);
 
-        vector<cv::Point2f> cam0_inliers(0);
-        vector<cv::Point2f> cam1_inliers(0);
-        vector<float> response_inliers(0);
+        std::vector<mynt::Point2f> cam0_inliers(0);
+        std::vector<mynt::Point2f> cam1_inliers(0);
+        std::vector<float> response_inliers(0);
         for (int i = 0; i < inlier_markers.size(); ++i) {
-            if (inlier_markers[i] == 0) continue;
+            if (inlier_markers[i] == 0)
+                continue;
             cam0_inliers.push_back(cam0_points[i]);
             cam1_inliers.push_back(cam1_points[i]);
             response_inliers.push_back(new_features[i].response);
@@ -302,13 +254,12 @@ namespace mynt {
 
         // Group the features into grids
         GridFeatures grid_new_features;
-        for (int code = 0; code <
-                           processor_config.grid_row * processor_config.grid_col; ++code)
-            grid_new_features[code] = vector<FeatureMetaData>(0);
+        for (int code = 0; code < processor_config.grid_row * processor_config.grid_col; ++code)
+            grid_new_features[code] = std::vector<FeatureMetaData>(0);
 
         for (int i = 0; i < cam0_inliers.size(); ++i) {
-            const cv::Point2f &cam0_point = cam0_inliers[i];
-            const cv::Point2f &cam1_point = cam1_inliers[i];
+            const mynt::Point2f &cam0_point = cam0_inliers[i];
+            const mynt::Point2f &cam1_point = cam1_inliers[i];
             const float &response = response_inliers[i];
 
             int row = static_cast<int>(cam0_point.y / grid_height);
@@ -318,23 +269,20 @@ namespace mynt {
             FeatureMetaData new_feature;
             new_feature.response = response;
             new_feature.cam0_point = cam0_point;
-            new_feature.cam1_point = cam1_point;
+            new_feature.cam1_point = cam1_point;;
             grid_new_features[code].push_back(new_feature);
         }
 
         // Sort the new features in each grid based on its response.
         for (auto &item : grid_new_features)
-            std::sort(item.second.begin(), item.second.end(),
-                      &ImageProcessor::featureCompareByResponse);
+            std::sort(item.second.begin(), item.second.end(), &ImageProcessor::featureCompareByResponse);
 
         // Collect new features within each grid with high response.
-        for (int code = 0; code <
-                           processor_config.grid_row * processor_config.grid_col; ++code) {
-            vector<FeatureMetaData> &features_this_grid = (*curr_features_ptr)[code];
-            vector<FeatureMetaData> &new_features_this_grid = grid_new_features[code];
+        for (int code = 0; code < processor_config.grid_row * processor_config.grid_col; ++code) {
+            std::vector<FeatureMetaData> &features_this_grid = (*curr_features_ptr)[code];
+            std::vector<FeatureMetaData> &new_features_this_grid = grid_new_features[code];
 
-            for (int k = 0; k < processor_config.grid_min_feature_num &&
-                            k < new_features_this_grid.size(); ++k) {
+            for (int k = 0; k < processor_config.grid_min_feature_num && k < new_features_this_grid.size(); ++k) {
                 features_this_grid.push_back(new_features_this_grid[k]);
                 features_this_grid.back().id = next_feature_id++;
                 features_this_grid.back().lifetime = 1;
@@ -345,10 +293,10 @@ namespace mynt {
     }
 
     void ImageProcessor::predictFeatureTracking(
-            const vector<cv::Point2f> &input_pts,
-            const cv::Matx33f &R_p_c,
-            const cv::Vec4d &intrinsics,
-            vector<cv::Point2f> &compensated_pts) {
+            const std::vector<mynt::Point2f> &input_pts,
+            const mynt::RotationMatrix &R_p_c,
+            const mynt::Vector4 &intrinsics,
+            std::vector<mynt::Point2f> &compensated_pts) {
 
         // Return directly if there are no input features.
         if (input_pts.size() == 0) {
@@ -358,15 +306,17 @@ namespace mynt {
         compensated_pts.resize(input_pts.size());
 
         // Intrinsic matrix.
-        cv::Matx33f K(
+        mynt::FLOAT kval[9] = {
                 intrinsics[0], 0.0, intrinsics[2],
                 0.0, intrinsics[1], intrinsics[3],
-                0.0, 0.0, 1.0);
-        cv::Matx33f H = K * R_p_c * K.inv();
+                0.0, 0.0, 1.0};
+        mynt::Matrix K(3, 3, kval);
+        mynt::Matrix H = K * R_p_c * K.inv();
 
         for (int i = 0; i < input_pts.size(); ++i) {
-            cv::Vec3f p1(input_pts[i].x, input_pts[i].y, 1.0f);
-            cv::Vec3f p2 = H * p1;
+            mynt::FLOAT p1val[3] = {input_pts[i].x, input_pts[i].y, 1.0f};
+            mynt::Vector3 p1(p1val);
+            mynt::Vector3 p2 = H * p1;
             compensated_pts[i].x = p2[0] / p2[2];
             compensated_pts[i].y = p2[1] / p2[2];
         }
@@ -376,61 +326,69 @@ namespace mynt {
 
     void ImageProcessor::trackFeatures() {
         // Size of each grid.
-        static int grid_height =
-                cam0_curr_img_ptr->image.rows / processor_config.grid_row;
-        static int grid_width =
-                cam0_curr_img_ptr->image.cols / processor_config.grid_col;
+        static int grid_height = cam0_curr_img_ptr->image.rows / processor_config.grid_row;
+        static int grid_width  = cam0_curr_img_ptr->image.cols / processor_config.grid_col;
 
-        // Compute a rough relative rotation which takes a vector
-        // from the previous frame to the current frame.
-        Matx33f cam0_R_p_c;
-        Matx33f cam1_R_p_c;
+        // Compute a rough relative rotation which takes a vector from the previous frame to the current frame.
+        mynt::RotationMatrix cam0_R_p_c;
+        mynt::RotationMatrix cam1_R_p_c;
         integrateImuData(cam0_R_p_c, cam1_R_p_c);
 
         // Organize the features in the previous image.
-        vector<FeatureIDType> prev_ids(0);
-        vector<int> prev_lifetime(0);
-        vector<Point2f> prev_cam0_points(0);
-        vector<Point2f> prev_cam1_points(0);
+        std::vector<FeatureIDType> prev_ids(0);
+        std::vector<int> prev_lifetime(0);
+        std::vector<mynt::Point2f> prev_cam0_points(0);
+        std::vector<mynt::Point2f> prev_cam1_points(0);
 
         for (const auto &item : *prev_features_ptr) {
             for (const auto &prev_feature : item.second) {
                 prev_ids.push_back(prev_feature.id);
                 prev_lifetime.push_back(prev_feature.lifetime);
-                prev_cam0_points.push_back(prev_feature.cam0_point);
-                prev_cam1_points.push_back(prev_feature.cam1_point);
+                mynt::Point2f p_pt0(prev_feature.cam0_point.x, prev_feature.cam0_point.y);
+                mynt::Point2f p_pt1(prev_feature.cam1_point.x, prev_feature.cam1_point.y);
+                prev_cam0_points.push_back(p_pt0);
+                prev_cam1_points.push_back(p_pt1);
             }
         }
 
         // Number of the features before tracking.
         before_tracking = prev_cam0_points.size();
 
-        // Abort tracking if there is no features in
-        // the previous frame.
+        // Abort tracking if there is no features in the previous frame.
         if (prev_ids.size() == 0) return;
 
         // Track features using LK optical flow method.
-        vector<Point2f> curr_cam0_points(0);
-        vector<unsigned char> track_inliers(0);
+        std::vector<mynt::Point2f> curr_cam0_points(0);
+        std::vector<unsigned char> track_inliers(0);
 
-        predictFeatureTracking(prev_cam0_points,
-                               cam0_R_p_c, cam0_intrinsics, curr_cam0_points);
+        predictFeatureTracking(prev_cam0_points, cam0_R_p_c, cam0_intrinsics, curr_cam0_points);
 
-        calcOpticalFlowPyrLK(
+        // TODO
+        std::vector<cv::Point2f> cv_curr_cam0_points;
+        for(int i=0; i<curr_cam0_points.size(); ++i)
+            cv_curr_cam0_points.push_back(cv::Point2f(curr_cam0_points[i].x, curr_cam0_points[i].y));
+        std::vector<cv::Point2f> cv_prev_cam0_points;
+        for(int i=0; i<prev_cam0_points.size(); ++i)
+            cv_prev_cam0_points.push_back(cv::Point2f(prev_cam0_points[i].x, prev_cam0_points[i].y));
+
+        cv::calcOpticalFlowPyrLK(
                 prev_cam0_pyramid_, curr_cam0_pyramid_,
-                prev_cam0_points, curr_cam0_points,
-                track_inliers, noArray(),
-                Size(processor_config.patch_size, processor_config.patch_size),
+                cv_prev_cam0_points, cv_curr_cam0_points,
+                track_inliers, cv::noArray(),
+                cv::Size(processor_config.patch_size, processor_config.patch_size),
                 processor_config.pyramid_levels,
-                TermCriteria(TermCriteria::COUNT + TermCriteria::EPS,
+                cv::TermCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS,
                              processor_config.max_iteration,
                              processor_config.track_precision),
                 cv::OPTFLOW_USE_INITIAL_FLOW);
 
-        // Mark those tracked points out of the image region
-        // as untracked.
+        for(int i=0; i<cv_curr_cam0_points.size(); ++i)
+            curr_cam0_points[i] = mynt::Point2f(cv_curr_cam0_points[i].x, cv_curr_cam0_points[i].y);
+
+        // Mark those tracked points out of the image region as untracked.
         for (int i = 0; i < curr_cam0_points.size(); ++i) {
-            if (track_inliers[i] == 0) continue;
+            if (track_inliers[i] == 0)
+                continue;
             if (curr_cam0_points[i].y < 0 ||
                 curr_cam0_points[i].y > cam0_curr_img_ptr->image.rows - 1 ||
                 curr_cam0_points[i].x < 0 ||
@@ -439,26 +397,20 @@ namespace mynt {
         }
 
         // Collect the tracked points.
-        vector<FeatureIDType> prev_tracked_ids(0);
-        vector<int> prev_tracked_lifetime(0);
-        vector<Point2f> prev_tracked_cam0_points(0);
-        vector<Point2f> prev_tracked_cam1_points(0);
-        vector<Point2f> curr_tracked_cam0_points(0);
+        std::vector<FeatureIDType> prev_tracked_ids(0);
+        std::vector<int> prev_tracked_lifetime(0);
+        std::vector<mynt::Point2f> prev_tracked_cam0_points(0);
+        std::vector<mynt::Point2f> prev_tracked_cam1_points(0);
+        std::vector<mynt::Point2f> curr_tracked_cam0_points(0);
 
-        removeUnmarkedElements(
-                prev_ids, track_inliers, prev_tracked_ids);
-        removeUnmarkedElements(
-                prev_lifetime, track_inliers, prev_tracked_lifetime);
-        removeUnmarkedElements(
-                prev_cam0_points, track_inliers, prev_tracked_cam0_points);
-        removeUnmarkedElements(
-                prev_cam1_points, track_inliers, prev_tracked_cam1_points);
-        removeUnmarkedElements(
-                curr_cam0_points, track_inliers, curr_tracked_cam0_points);
+        removeUnmarkedElements(prev_ids, track_inliers, prev_tracked_ids);
+        removeUnmarkedElements(prev_lifetime, track_inliers, prev_tracked_lifetime);
+        removeUnmarkedElements(prev_cam0_points, track_inliers, prev_tracked_cam0_points);
+        removeUnmarkedElements(prev_cam1_points, track_inliers, prev_tracked_cam1_points);
+        removeUnmarkedElements(curr_cam0_points, track_inliers, curr_tracked_cam0_points);
 
         // Number of features left after tracking.
         after_tracking = curr_tracked_cam0_points.size();
-
 
         // Outlier removal involves three steps, which forms a close
         // loop between the previous and current frames of cam0 (left)
@@ -479,41 +431,35 @@ namespace mynt {
         // The stereo matching results are directly used in the RANSAC.
 
         // Step 1: stereo matching.
-        vector<Point2f> curr_cam1_points(0);
-        vector<unsigned char> match_inliers(0);
+        std::vector<mynt::Point2f> curr_cam1_points(0);
+        std::vector<unsigned char> match_inliers(0);
         stereoMatch(curr_tracked_cam0_points, curr_cam1_points, match_inliers);
 
-        vector<FeatureIDType> prev_matched_ids(0);
-        vector<int> prev_matched_lifetime(0);
-        vector<Point2f> prev_matched_cam0_points(0);
-        vector<Point2f> prev_matched_cam1_points(0);
-        vector<Point2f> curr_matched_cam0_points(0);
-        vector<Point2f> curr_matched_cam1_points(0);
+        std::vector<FeatureIDType> prev_matched_ids(0);
+        std::vector<int> prev_matched_lifetime(0);
+        std::vector<mynt::Point2f> prev_matched_cam0_points(0);
+        std::vector<mynt::Point2f> prev_matched_cam1_points(0);
+        std::vector<mynt::Point2f> curr_matched_cam0_points(0);
+        std::vector<mynt::Point2f> curr_matched_cam1_points(0);
 
-        removeUnmarkedElements(
-                prev_tracked_ids, match_inliers, prev_matched_ids);
-        removeUnmarkedElements(
-                prev_tracked_lifetime, match_inliers, prev_matched_lifetime);
-        removeUnmarkedElements(
-                prev_tracked_cam0_points, match_inliers, prev_matched_cam0_points);
-        removeUnmarkedElements(
-                prev_tracked_cam1_points, match_inliers, prev_matched_cam1_points);
-        removeUnmarkedElements(
-                curr_tracked_cam0_points, match_inliers, curr_matched_cam0_points);
-        removeUnmarkedElements(
-                curr_cam1_points, match_inliers, curr_matched_cam1_points);
+        removeUnmarkedElements(prev_tracked_ids, match_inliers, prev_matched_ids);
+        removeUnmarkedElements(prev_tracked_lifetime, match_inliers, prev_matched_lifetime);
+        removeUnmarkedElements(prev_tracked_cam0_points, match_inliers, prev_matched_cam0_points);
+        removeUnmarkedElements(prev_tracked_cam1_points, match_inliers, prev_matched_cam1_points);
+        removeUnmarkedElements(curr_tracked_cam0_points, match_inliers, curr_matched_cam0_points);
+        removeUnmarkedElements(curr_cam1_points, match_inliers, curr_matched_cam1_points);
 
         // Number of features left after stereo matching.
         after_matching = curr_matched_cam0_points.size();
 
         // Step 2 and 3: RANSAC on temporal image pairs of cam0 and cam1.
-        vector<int> cam0_ransac_inliers(0);
+        std::vector<int> cam0_ransac_inliers(0);
         twoPointRansac(prev_matched_cam0_points, curr_matched_cam0_points,
                        cam0_R_p_c, cam0_intrinsics, cam0_distortion_model,
                        cam0_distortion_coeffs, processor_config.ransac_threshold,
                        0.99, cam0_ransac_inliers);
 
-        vector<int> cam1_ransac_inliers(0);
+        std::vector<int> cam1_ransac_inliers(0);
         twoPointRansac(prev_matched_cam1_points, curr_matched_cam1_points,
                        cam1_R_p_c, cam1_intrinsics, cam1_distortion_model,
                        cam1_distortion_coeffs, processor_config.ransac_threshold,
@@ -523,13 +469,10 @@ namespace mynt {
         after_ransac = 0;
 
         for (int i = 0; i < cam0_ransac_inliers.size(); ++i) {
-            if (cam0_ransac_inliers[i] == 0 ||
-                cam1_ransac_inliers[i] == 0)
+            if (cam0_ransac_inliers[i] == 0 || cam1_ransac_inliers[i] == 0)
                 continue;
-            int row = static_cast<int>(
-                    curr_matched_cam0_points[i].y / grid_height);
-            int col = static_cast<int>(
-                    curr_matched_cam0_points[i].x / grid_width);
+            int row = static_cast<int>(curr_matched_cam0_points[i].y / grid_height);
+            int col = static_cast<int>(curr_matched_cam0_points[i].x / grid_width);
             int code = row * processor_config.grid_col + col;
             (*curr_features_ptr)[code].push_back(FeatureMetaData());
 
@@ -562,37 +505,45 @@ namespace mynt {
     }
 
     void ImageProcessor::stereoMatch(
-            const vector<cv::Point2f> &cam0_points,
-            vector<cv::Point2f> &cam1_points,
-            vector<unsigned char> &inlier_markers) {
+            const std::vector<mynt::Point2f> &cam0_points,
+            std::vector<mynt::Point2f> &cam1_points,
+            std::vector<unsigned char> &inlier_markers) {
 
-        if (cam0_points.size() == 0) return;
+        if (cam0_points.size() == 0)
+            return;
 
         if (cam1_points.size() == 0) {
-            // Initialize cam1_points by projecting cam0_points to cam1 using the
-            // rotation from stereo extrinsics
-            const Eigen::Matrix3d R_cam0_cam1 = R_cam1_imu.transpose() * R_cam0_imu;
-            vector<cv::Point2f> cam0_points_undistorted;
-            undistortPoints(cam0_points, cam0_intrinsics, cam0_distortion_model,
-                            cam0_distortion_coeffs, cam0_points_undistorted,
-                            matrix3d_to_cvmat(R_cam0_cam1));
-            cam1_points = distortPoints(cam0_points_undistorted, cam1_intrinsics,
-                                        cam1_distortion_model, cam1_distortion_coeffs);
+            // Initialize cam1_points by projecting cam0_points to cam1 using the rotation from stereo extrinsics
+            const mynt::RotationMatrix R_cam0_cam1 = R_cam1_imu.transpose() * R_cam0_imu;
+            std::vector<mynt::Point2f> cam0_points_undistorted;
+            undistortPoints(cam0_points, cam0_intrinsics, cam0_distortion_model, cam0_distortion_coeffs, cam0_points_undistorted,
+                            matrix3_to_cvmat(R_cam0_cam1));
+            cam1_points = distortPoints(cam0_points_undistorted, cam1_intrinsics, cam1_distortion_model, cam1_distortion_coeffs);
         }
 
+        // TODO
+        std::vector<cv::Point2f> cv_cam0_points(cam0_points.size());
+        for(int i=0; i<cam0_points.size(); ++i)
+            cv_cam0_points[i] = cv::Point2f(cam0_points[i].x, cam0_points[i].y);
+        std::vector<cv::Point2f> cv_cam1_points(cam1_points.size());
+        for(int i=0; i<cam1_points.size(); ++i)
+            cv_cam1_points[i] = cv::Point2f(cam1_points[i].x, cam1_points[i].y);
+
         // Track features using LK optical flow method.
-        calcOpticalFlowPyrLK(curr_cam0_pyramid_, curr_cam1_pyramid_,
-                             cam0_points, cam1_points,
-                             inlier_markers, noArray(),
-                             Size(processor_config.patch_size, processor_config.patch_size),
+        cv::calcOpticalFlowPyrLK(curr_cam0_pyramid_, curr_cam1_pyramid_,
+                                 cv_cam0_points, cv_cam1_points,
+                             inlier_markers, cv::noArray(),
+                             cv::Size(processor_config.patch_size, processor_config.patch_size),
                              processor_config.pyramid_levels,
-                             TermCriteria(TermCriteria::COUNT + TermCriteria::EPS,
+                             cv::TermCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS,
                                           processor_config.max_iteration,
                                           processor_config.track_precision),
                              cv::OPTFLOW_USE_INITIAL_FLOW);
 
-        // Mark those tracked points out of the image region
-        // as untracked.
+        for(int i=0; i<cv_cam1_points.size(); ++i)
+            cam1_points[i] = mynt::Point2f(cv_cam1_points[i].x, cv_cam1_points[i].y);
+
+        // Mark those tracked points out of the image region as untracked.
         for (int i = 0; i < cam1_points.size(); ++i) {
             if (inlier_markers[i] == 0) continue;
             if (cam1_points[i].y < 0 ||
@@ -604,35 +555,34 @@ namespace mynt {
 
         // Compute the relative rotation between the cam0
         // frame and cam1 frame.
-        const Eigen::Matrix3d R_cam0_cam1 = R_cam1_imu.transpose() *  R_cam0_imu;
-        const Eigen::Vector3d t_cam0_cam1 = R_cam1_imu.transpose() * (t_cam0_imu - t_cam1_imu);
+        const mynt::RotationMatrix R_cam0_cam1 = R_cam1_imu.transpose() *  R_cam0_imu;
+        const mynt::Vector3 t_cam0_cam1 = R_cam1_imu.transpose() * (t_cam0_imu - t_cam1_imu);
         // Compute the essential matrix.
-        const Eigen::Matrix3d t_cam0_cam1_hat = mynt::skewSymmetric(t_cam0_cam1);
-        const cv::Matx33d E = matrix3d_to_cvmat(t_cam0_cam1_hat * R_cam0_cam1);
+        const mynt::Matrix t_cam0_cam1_hat = mynt::skew_symmetric(t_cam0_cam1);
+        const mynt::Matrix E = t_cam0_cam1_hat * R_cam0_cam1;
 
-        // Further remove outliers based on the known
-        // essential matrix.
-        vector<cv::Point2f> cam0_points_undistorted(0);
-        vector<cv::Point2f> cam1_points_undistorted(0);
-        undistortPoints(
-                cam0_points, cam0_intrinsics, cam0_distortion_model,
-                cam0_distortion_coeffs, cam0_points_undistorted);
-        undistortPoints(
-                cam1_points, cam1_intrinsics, cam1_distortion_model,
-                cam1_distortion_coeffs, cam1_points_undistorted);
+        // Further remove outliers based on the known essential matrix.
+        std::vector<mynt::Point2f> v_pts0;
+        for(int i=0; i<cam0_points.size(); ++i)
+            v_pts0.push_back(cam0_points[i]);
+        std::vector<mynt::Point2f> v_pts1;
+        for(int i=0; i<cam1_points.size(); ++i)
+            v_pts1.push_back(cam1_points[i]);
 
-        double norm_pixel_unit = 4.0 / (
-                cam0_intrinsics[0] + cam0_intrinsics[1] +
-                cam1_intrinsics[0] + cam1_intrinsics[1]);
+        std::vector<mynt::Point2f> cam0_points_undistorted(0);
+        std::vector<mynt::Point2f> cam1_points_undistorted(0);
+        undistortPoints(v_pts0, cam0_intrinsics, cam0_distortion_model, cam0_distortion_coeffs, cam0_points_undistorted);
+        undistortPoints(v_pts1, cam1_intrinsics, cam1_distortion_model, cam1_distortion_coeffs, cam1_points_undistorted);
+
+        double norm_pixel_unit = 4.0 / (cam0_intrinsics[0] + cam0_intrinsics[1] + cam1_intrinsics[0] + cam1_intrinsics[1]);
 
         for (int i = 0; i < cam0_points_undistorted.size(); ++i) {
-            if (inlier_markers[i] == 0) continue;
-            cv::Vec3d pt0(cam0_points_undistorted[i].x, cam0_points_undistorted[i].y, 1.0);
-            cv::Vec3d pt1(cam1_points_undistorted[i].x, cam1_points_undistorted[i].y, 1.0);
-            cv::Vec3d epipolar_line = E * pt0;
-            double error = fabs((pt1.t() * epipolar_line)[0]) / sqrt(
-                    epipolar_line[0] * epipolar_line[0] +
-                    epipolar_line[1] * epipolar_line[1]);
+            if (inlier_markers[i] == 0)
+                continue;
+            mynt::Vector3 pt0({cam0_points_undistorted[i].x, cam0_points_undistorted[i].y, 1.0});
+            mynt::Vector3 pt1({cam1_points_undistorted[i].x, cam1_points_undistorted[i].y, 1.0});
+            mynt::Vector3 epipolar_line = E * pt0;
+            double error = fabs(pt1.dot(epipolar_line)) / sqrt(epipolar_line[0] * epipolar_line[0] + epipolar_line[1] * epipolar_line[1]);
             if (error > processor_config.stereo_threshold * norm_pixel_unit)
                 inlier_markers[i] = 0;
         }
@@ -641,78 +591,71 @@ namespace mynt {
     }
 
     void ImageProcessor::addNewFeatures() {
-        const Mat &curr_img = cam0_curr_img_ptr->image;
+        const cv::Mat &curr_img = cam0_curr_img_ptr->image;
 
         // Size of each grid.
-        static int grid_height =
-                cam0_curr_img_ptr->image.rows / processor_config.grid_row;
-        static int grid_width =
-                cam0_curr_img_ptr->image.cols / processor_config.grid_col;
+        static int grid_height = cam0_curr_img_ptr->image.rows / processor_config.grid_row;
+        static int grid_width  = cam0_curr_img_ptr->image.cols / processor_config.grid_col;
 
         // Create a mask to avoid redetecting existing features.
-        Mat mask(curr_img.rows, curr_img.cols, CV_8U, Scalar(1));
+        cv::Mat mask(curr_img.rows, curr_img.cols, CV_8U, cv::Scalar(1));
 
         for (const auto &features : *curr_features_ptr) {
             for (const auto &feature : features.second) {
                 const int y = static_cast<int>(feature.cam0_point.y);
                 const int x = static_cast<int>(feature.cam0_point.x);
 
-                int up_lim = y - 2, bottom_lim = y + 3,
-                        left_lim = x - 2, right_lim = x + 3;
+                int up_lim = y - 2, bottom_lim = y + 3, left_lim = x - 2, right_lim = x + 3;
                 if (up_lim < 0) up_lim = 0;
                 if (bottom_lim > curr_img.rows) bottom_lim = curr_img.rows;
                 if (left_lim < 0) left_lim = 0;
                 if (right_lim > curr_img.cols) right_lim = curr_img.cols;
 
-                Range row_range(up_lim, bottom_lim);
-                Range col_range(left_lim, right_lim);
+                cv::Range row_range(up_lim, bottom_lim);
+                cv::Range col_range(left_lim, right_lim);
                 mask(row_range, col_range) = 0;
             }
         }
 
         // Detect new features.
-        vector<KeyPoint> new_features(0);
+        std::vector<cv::KeyPoint> new_features(0);
         detector_ptr->detect(curr_img, new_features, mask);
 
         // Collect the new detected features based on the grid.
         // Select the ones with top response within each grid afterwards.
-        vector<vector<KeyPoint> > new_feature_sieve(
-                processor_config.grid_row * processor_config.grid_col);
+        std::vector<std::vector<cv::KeyPoint> > new_feature_sieve(processor_config.grid_row * processor_config.grid_col);
         for (const auto &feature : new_features) {
             int row = static_cast<int>(feature.pt.y / grid_height);
             int col = static_cast<int>(feature.pt.x / grid_width);
-            new_feature_sieve[
-                    row * processor_config.grid_col + col].push_back(feature);
+            new_feature_sieve[row * processor_config.grid_col + col].push_back(feature);
         }
 
         new_features.clear();
         for (auto &item : new_feature_sieve) {
             if (item.size() > processor_config.grid_max_feature_num) {
-                std::sort(item.begin(), item.end(),
-                          &ImageProcessor::keyPointCompareByResponse);
-                item.erase(
-                        item.begin() + processor_config.grid_max_feature_num, item.end());
+                std::sort(item.begin(), item.end(), &ImageProcessor::keyPointCompareByResponse);
+                item.erase(item.begin() + processor_config.grid_max_feature_num, item.end());
             }
             new_features.insert(new_features.end(), item.begin(), item.end());
         }
 
         int detected_new_features = new_features.size();
 
-        // Find the stereo matched points for the newly
-        // detected features.
-        vector<cv::Point2f> cam0_points(new_features.size());
+        // Find the stereo matched points for the newly detected features.
+        std::vector<mynt::Point2f> cam0_points(new_features.size());
         for (int i = 0; i < new_features.size(); ++i)
-            cam0_points[i] = new_features[i].pt;
+            cam0_points[i] = mynt::Point2f(new_features[i].pt.x, new_features[i].pt.y);
 
-        vector<cv::Point2f> cam1_points(0);
-        vector<unsigned char> inlier_markers(0);
+        std::vector<mynt::Point2f> cam1_points(0);
+        std::vector<unsigned char> inlier_markers(0);
         stereoMatch(cam0_points, cam1_points, inlier_markers);
 
-        vector<cv::Point2f> cam0_inliers(0);
-        vector<cv::Point2f> cam1_inliers(0);
-        vector<float> response_inliers(0);
+        std::vector<mynt::Point2f> cam0_inliers(0);
+        std::vector<mynt::Point2f> cam1_inliers(0);
+        std::vector<float> response_inliers(0);
         for (int i = 0; i < inlier_markers.size(); ++i) {
-            if (inlier_markers[i] == 0) continue;
+            if (inlier_markers[i] == 0)
+                continue;
             cam0_inliers.push_back(cam0_points[i]);
             cam1_inliers.push_back(cam1_points[i]);
             response_inliers.push_back(new_features[i].response);
@@ -727,13 +670,12 @@ namespace mynt {
 
         // Group the features into grids
         GridFeatures grid_new_features;
-        for (int code = 0; code <
-                           processor_config.grid_row * processor_config.grid_col; ++code)
-            grid_new_features[code] = vector<FeatureMetaData>(0);
+        for (int code = 0; code < processor_config.grid_row * processor_config.grid_col; ++code)
+            grid_new_features[code] = std::vector<FeatureMetaData>(0);
 
         for (int i = 0; i < cam0_inliers.size(); ++i) {
-            const cv::Point2f &cam0_point = cam0_inliers[i];
-            const cv::Point2f &cam1_point = cam1_inliers[i];
+            const mynt::Point2f &cam0_point = cam0_inliers[i];
+            const mynt::Point2f &cam1_point = cam1_inliers[i];
             const float &response = response_inliers[i];
 
             int row = static_cast<int>(cam0_point.y / grid_height);
@@ -749,24 +691,19 @@ namespace mynt {
 
         // Sort the new features in each grid based on its response.
         for (auto &item : grid_new_features)
-            std::sort(item.second.begin(), item.second.end(),
-                      &ImageProcessor::featureCompareByResponse);
+            std::sort(item.second.begin(), item.second.end(), &ImageProcessor::featureCompareByResponse);
 
         int new_added_feature_num = 0;
         // Collect new features within each grid with high response.
-        for (int code = 0; code <
-                           processor_config.grid_row * processor_config.grid_col; ++code) {
-            vector<FeatureMetaData> &features_this_grid = (*curr_features_ptr)[code];
-            vector<FeatureMetaData> &new_features_this_grid = grid_new_features[code];
+        for (int code = 0; code < processor_config.grid_row * processor_config.grid_col; ++code) {
+            std::vector<FeatureMetaData> &features_this_grid = (*curr_features_ptr)[code];
+            std::vector<FeatureMetaData> &new_features_this_grid = grid_new_features[code];
 
-            if (features_this_grid.size() >=
-                processor_config.grid_min_feature_num)
+            if (features_this_grid.size() >= processor_config.grid_min_feature_num)
                 continue;
 
-            int vacancy_num = processor_config.grid_min_feature_num -
-                              features_this_grid.size();
-            for (int k = 0;
-                 k < vacancy_num && k < new_features_this_grid.size(); ++k) {
+            int vacancy_num = processor_config.grid_min_feature_num - features_this_grid.size();
+            for (int k = 0; k < vacancy_num && k < new_features_this_grid.size(); ++k) {
                 features_this_grid.push_back(new_features_this_grid[k]);
                 features_this_grid.back().id = next_feature_id++;
                 features_this_grid.back().lifetime = 1;
@@ -775,8 +712,8 @@ namespace mynt {
             }
         }
 
-        //printf("\033[0;33m detected: %d; matched: %d; new added feature: %d\033[0m\n",
-        //    detected_new_features, matched_new_features, new_added_feature_num);
+//        printf("\033[0;33m detected: %d; matched: %d; new added feature: %d\033[0m\n",
+//            detected_new_features, matched_new_features, new_added_feature_num);
 
         return;
     }
@@ -784,26 +721,21 @@ namespace mynt {
     void ImageProcessor::pruneGridFeatures() {
         for (auto &item : *curr_features_ptr) {
             auto &grid_features = item.second;
-            // Continue if the number of features in this grid does
-            // not exceed the upper bound.
-            if (grid_features.size() <=
-                processor_config.grid_max_feature_num)
+            // Continue if the number of features in this grid does not exceed the upper bound.
+            if (grid_features.size() <= processor_config.grid_max_feature_num)
                 continue;
-            std::sort(grid_features.begin(), grid_features.end(),
-                      &ImageProcessor::featureCompareByLifetime);
-            grid_features.erase(grid_features.begin() +
-                                processor_config.grid_max_feature_num,
-                                grid_features.end());
+            std::sort(grid_features.begin(), grid_features.end(), &ImageProcessor::featureCompareByLifetime);
+            grid_features.erase(grid_features.begin() + processor_config.grid_max_feature_num, grid_features.end());
         }
         return;
     }
 
     void ImageProcessor::undistortPoints(
-            const vector<cv::Point2f> &pts_in,
-            const cv::Vec4d &intrinsics,
-            const string &distortion_model,
-            const cv::Vec4d &distortion_coeffs,
-            vector<cv::Point2f> &pts_out,
+            const std::vector<mynt::Point2f> &pts_in,
+            const mynt::Vector4 &intrinsics,
+            const std::string &distortion_model,
+            const mynt::Vector4 &distortion_coeffs,
+            std::vector<mynt::Point2f> &pts_out,
             const cv::Matx33d &rectification_matrix,
             const cv::Vec4d &new_intrinsics) {
 
@@ -819,51 +751,69 @@ namespace mynt {
                 0.0, new_intrinsics[1], new_intrinsics[3],
                 0.0, 0.0, 1.0);
 
+        // TODO
+        std::vector<cv::Point2f> cv_pts_in;
+        for(int i=0; i<pts_in.size(); ++i)
+            cv_pts_in.push_back(cv::Point2f(pts_in[i].x, pts_in[i].y));
+
+        std::vector<cv::Point2f> cv_pts_out;
+
         if (distortion_model == "radtan") {
-            cv::undistortPoints(pts_in, pts_out, K, distortion_coeffs,
-                                rectification_matrix, K_new);
+            cv::undistortPoints(cv_pts_in, cv_pts_out, K, vector4_to_cvvec4d(distortion_coeffs), rectification_matrix, K_new);
         } else if (distortion_model == "equidistant") {
-            cv::fisheye::undistortPoints(pts_in, pts_out, K, distortion_coeffs,
-                                         rectification_matrix, K_new);
+            cv::fisheye::undistortPoints(cv_pts_in, cv_pts_out, K, vector4_to_cvvec4d(distortion_coeffs), rectification_matrix, K_new);
         } else {
             printf("The model %s is unrecognized, use radtan instead...", distortion_model.c_str());
-            cv::undistortPoints(pts_in, pts_out, K, distortion_coeffs, rectification_matrix, K_new);
+            cv::undistortPoints(cv_pts_in, cv_pts_out, K, vector4_to_cvvec4d(distortion_coeffs), rectification_matrix, K_new);
         }
+
+        // TODO
+        pts_out.clear();
+        for(int i=0; i<cv_pts_out.size(); ++i)
+            pts_out.push_back(mynt::Point2f(cv_pts_out[i].x, cv_pts_out[i].y));
 
         return;
     }
 
-    vector<cv::Point2f> ImageProcessor::distortPoints(
-            const vector<cv::Point2f> &pts_in,
-            const cv::Vec4d &intrinsics,
-            const string &distortion_model,
-            const cv::Vec4d &distortion_coeffs) {
+    std::vector<mynt::Point2f> ImageProcessor::distortPoints(
+            const std::vector<mynt::Point2f> &pts_in,
+            const mynt::Vector4 &intrinsics,
+            const std::string &distortion_model,
+            const mynt::Vector4 &distortion_coeffs) {
 
         const cv::Matx33d K(intrinsics[0], 0.0, intrinsics[2],
                             0.0, intrinsics[1], intrinsics[3],
                             0.0, 0.0, 1.0);
 
-        vector<cv::Point2f> pts_out;
+        std::vector<cv::Point2f> cv_pts_out;
+
+        // TODO
+        std::vector<cv::Point2f> cv_pts_in;
+        for(int i=0; i<pts_in.size(); ++i)
+            cv_pts_in.push_back(cv::Point2f(pts_in[i].x, pts_in[i].y));
+
         if (distortion_model == "radtan") {
-            vector<cv::Point3f> homogenous_pts;
-            cv::convertPointsToHomogeneous(pts_in, homogenous_pts);
-            cv::projectPoints(homogenous_pts, cv::Vec3d::zeros(), cv::Vec3d::zeros(), K,
-                              distortion_coeffs, pts_out);
+            std::vector<cv::Point3f> homogenous_pts;
+            cv::convertPointsToHomogeneous(cv_pts_in, homogenous_pts);
+            cv::projectPoints(homogenous_pts, cv::Vec3d::zeros(), cv::Vec3d::zeros(), K, vector4_to_cvvec4d(distortion_coeffs), cv_pts_out);
         } else if (distortion_model == "equidistant") {
-            cv::fisheye::distortPoints(pts_in, pts_out, K, distortion_coeffs);
+            cv::fisheye::distortPoints(cv_pts_in, cv_pts_out, K, vector4_to_cvvec4d(distortion_coeffs));
         } else {
             printf("The model %s is unrecognized, using radtan instead...", distortion_model.c_str());
-            vector<cv::Point3f> homogenous_pts;
-            cv::convertPointsToHomogeneous(pts_in, homogenous_pts);
-            cv::projectPoints(homogenous_pts, cv::Vec3d::zeros(), cv::Vec3d::zeros(), K,
-                              distortion_coeffs, pts_out);
+            std::vector<cv::Point3f> homogenous_pts;
+            cv::convertPointsToHomogeneous(cv_pts_in, homogenous_pts);
+            cv::projectPoints(homogenous_pts, cv::Vec3d::zeros(), cv::Vec3d::zeros(), K, vector4_to_cvvec4d(distortion_coeffs), cv_pts_out);
         }
+
+        // TODO
+        std::vector<mynt::Point2f> pts_out;
+        for(int i=0; i<cv_pts_out.size(); ++i)
+            pts_out.push_back(mynt::Point2f(cv_pts_out[i].x, cv_pts_out[i].y));
 
         return pts_out;
     }
 
-    void ImageProcessor::integrateImuData(
-            Matx33f &cam0_R_p_c, Matx33f &cam1_R_p_c) {
+    void ImageProcessor::integrateImuData(mynt::RotationMatrix &cam0_R_p_c, mynt::RotationMatrix &cam1_R_p_c) {
         // Find the start and the end limit within the imu msg buffer.
         auto begin_iter = imu_msg_buffer.begin();
         while (begin_iter != imu_msg_buffer.end()) {
@@ -882,33 +832,37 @@ namespace mynt {
         }
 
         // Compute the mean angular velocity in the IMU frame.
-        Eigen::Vector3d mean_ang_vel(0.0, 0.0, 0.0);
-        for (auto iter = begin_iter; iter < end_iter; ++iter)
-            mean_ang_vel += Eigen::Vector3d(iter->angular_velocity[0], iter->angular_velocity[1], iter->angular_velocity[2]);
+        mynt::Vector3 mean_ang_vel;
+        for (auto iter = begin_iter; iter < end_iter; ++iter) {
+            FLOAT val[3];
+            val[0] = iter->angular_velocity[0];
+            val[1] = iter->angular_velocity[1];
+            val[2] = iter->angular_velocity[2];
+            mean_ang_vel += mynt::Vector3(val);
+        }
 
         if (end_iter - begin_iter > 0)
             mean_ang_vel *= 1.0f / (end_iter - begin_iter);
 
-        // Transform the mean angular velocity from the IMU
-        // frame to the cam0 and cam1 frames.
-        Vec3f cam0_mean_ang_vel = vector3d_to_cvvec3d(R_cam0_imu.transpose() * mean_ang_vel);
-        Vec3f cam1_mean_ang_vel = vector3d_to_cvvec3d(R_cam1_imu.transpose() * mean_ang_vel);
+        // Transform the mean angular velocity from the IMU frame to the cam0 and cam1 frames.
+        mynt::Vector3 cam0_mean_ang_vel = R_cam0_imu.transpose() * mean_ang_vel;
+        mynt::Vector3 cam1_mean_ang_vel = R_cam1_imu.transpose() * mean_ang_vel;
 
         // Compute the relative rotation.
         double dtime = cam0_curr_img_ptr->time_stamp - cam0_prev_img_ptr->time_stamp;
-        Rodrigues(cam0_mean_ang_vel * dtime, cam0_R_p_c);
-        Rodrigues(cam1_mean_ang_vel * dtime, cam1_R_p_c);
-        cam0_R_p_c = cam0_R_p_c.t();
-        cam1_R_p_c = cam1_R_p_c.t();
+        cam0_R_p_c = mynt::rodrigues(cam0_mean_ang_vel * dtime);
+        cam1_R_p_c = mynt::rodrigues(cam1_mean_ang_vel * dtime);
+        cam0_R_p_c = ~cam0_R_p_c;
+        cam1_R_p_c = ~cam1_R_p_c;
 
         // Delete the useless and used imu messages.
         imu_msg_buffer.erase(imu_msg_buffer.begin(), end_iter);
+
         return;
     }
 
     void ImageProcessor::rescalePoints(
-            vector<Point2f> &pts1, vector<Point2f> &pts2,
-            float &scaling_factor) {
+            std::vector<mynt::Point2f> &pts1, std::vector<mynt::Point2f> &pts2, float &scaling_factor) {
 
         scaling_factor = 0.0f;
 
@@ -917,8 +871,7 @@ namespace mynt {
             scaling_factor += sqrt(pts2[i].dot(pts2[i]));
         }
 
-        scaling_factor = (pts1.size() + pts2.size()) /
-                         scaling_factor * sqrt(2.0f);
+        scaling_factor = (pts1.size() + pts2.size()) / scaling_factor * sqrt(2.0f);
 
         for (int i = 0; i < pts1.size(); ++i) {
             pts1[i] *= scaling_factor;
@@ -929,29 +882,30 @@ namespace mynt {
     }
 
     void ImageProcessor::twoPointRansac(
-            const vector<Point2f> &pts1, const vector<Point2f> &pts2,
-            const cv::Matx33f &R_p_c, const cv::Vec4d &intrinsics,
+            const std::vector<mynt::Point2f> &pts1,
+            const std::vector<mynt::Point2f> &pts2,
+            const mynt::RotationMatrix &R_p_c,
+            const mynt::Vector4 &intrinsics,
             const std::string &distortion_model,
-            const cv::Vec4d &distortion_coeffs,
+            const mynt::Vector4 &distortion_coeffs,
             const double &inlier_error,
             const double &success_probability,
-            vector<int> &inlier_markers) {
+            std::vector<int> &inlier_markers) {
 
         // Check the size of input point size.
         if (pts1.size() != pts2.size())
             printf("Sets of different size (%lu and %lu) are used...", pts1.size(), pts2.size());
 
         double norm_pixel_unit = 2.0 / (intrinsics[0] + intrinsics[1]);
-        int iter_num = static_cast<int>(
-                ceil(log(1 - success_probability) / log(1 - 0.7 * 0.7)));
+        int iter_num = static_cast<int>(std::ceil(log(1 - success_probability) / log(1 - 0.7 * 0.7)));
 
         // Initially, mark all points as inliers.
         inlier_markers.clear();
         inlier_markers.resize(pts1.size(), 1);
 
         // Undistort all the points.
-        vector<Point2f> pts1_undistorted(pts1.size());
-        vector<Point2f> pts2_undistorted(pts2.size());
+        std::vector<mynt::Point2f> pts1_undistorted(pts1.size());
+        std::vector<mynt::Point2f> pts2_undistorted(pts2.size());
         undistortPoints(
                 pts1, intrinsics, distortion_model,
                 distortion_coeffs, pts1_undistorted);
@@ -962,9 +916,9 @@ namespace mynt {
         // Compenstate the points in the previous image with
         // the relative rotation.
         for (auto &pt : pts1_undistorted) {
-            Vec3f pt_h(pt.x, pt.y, 1.0f);
+            mynt::Vector3 pt_h({pt.x, pt.y, 1.0f});
             //Vec3f pt_hc = dR * pt_h;
-            Vec3f pt_hc = R_p_c * pt_h;
+            mynt::Vector3 pt_hc = R_p_c * pt_h;
             pt.x = pt_hc[0];
             pt.y = pt_hc[1];
         }
@@ -976,7 +930,7 @@ namespace mynt {
 
         // Compute the difference between previous and current points,
         // which will be used frequently later.
-        vector<Point2d> pts_diff(pts1_undistorted.size());
+        std::vector<mynt::Point2f> pts_diff(pts1_undistorted.size());
         for (int i = 0; i < pts1_undistorted.size(); ++i)
             pts_diff[i] = pts1_undistorted[i] - pts2_undistorted[i];
 
@@ -1026,7 +980,7 @@ namespace mynt {
 
         // In the case of general motion, the RANSAC model can be applied.
         // The three column corresponds to tx, ty, and tz respectively.
-        MatrixXd coeff_t(pts_diff.size(), 3);
+        mynt::Matrix coeff_t(pts_diff.size(), 3);
         for (int i = 0; i < pts_diff.size(); ++i) {
             coeff_t(i, 0) = pts_diff[i].y;
             coeff_t(i, 1) = -pts_diff[i].x;
@@ -1034,21 +988,18 @@ namespace mynt {
                             pts1_undistorted[i].y * pts2_undistorted[i].x;
         }
 
-        vector<int> raw_inlier_idx;
+        std::vector<int> raw_inlier_idx;
         for (int i = 0; i < inlier_markers.size(); ++i) {
             if (inlier_markers[i] != 0)
                 raw_inlier_idx.push_back(i);
         }
 
-        vector<int> best_inlier_set;
+        std::vector<int> best_inlier_set;
         double best_error = 1e10;
-//        random_numbers::RandomNumberGenerator random_gen;
 
         for (int iter_idx = 0; iter_idx < iter_num; ++iter_idx) {
             // Randomly select two point pairs.
             // Although this is a weird way of selecting two pairs, but it is able to efficiently avoid selecting repetitive pairs.
-//            int select_idx1     = random_gen.uniformInteger(0, raw_inlier_idx.size() - 1);
-//            int select_idx_diff = random_gen.uniformInteger(1, raw_inlier_idx.size() - 1);
             int select_idx1     = mynt::uniform_integer(0, raw_inlier_idx.size() - 1);
             int select_idx_diff = mynt::uniform_integer(1, raw_inlier_idx.size() - 1);
             int select_idx2 = select_idx1 + select_idx_diff < raw_inlier_idx.size() ?
@@ -1059,47 +1010,43 @@ namespace mynt {
             int pair_idx2 = raw_inlier_idx[select_idx2];
 
             // Construct the model;
-            Vector2d coeff_tx(coeff_t(pair_idx1, 0), coeff_t(pair_idx2, 0));
-            Vector2d coeff_ty(coeff_t(pair_idx1, 1), coeff_t(pair_idx2, 1));
-            Vector2d coeff_tz(coeff_t(pair_idx1, 2), coeff_t(pair_idx2, 2));
-            vector<double> coeff_l1_norm(3);
-            coeff_l1_norm[0] = coeff_tx.lpNorm<1>();
-            coeff_l1_norm[1] = coeff_ty.lpNorm<1>();
-            coeff_l1_norm[2] = coeff_tz.lpNorm<1>();
-            int base_indicator = min_element(coeff_l1_norm.begin(),
-                                             coeff_l1_norm.end()) - coeff_l1_norm.begin();
+            mynt::Vector2 coeff_tx({coeff_t(pair_idx1, 0), coeff_t(pair_idx2, 0)});
+            mynt::Vector2 coeff_ty({coeff_t(pair_idx1, 1), coeff_t(pair_idx2, 1)});
+            mynt::Vector2 coeff_tz({coeff_t(pair_idx1, 2), coeff_t(pair_idx2, 2)});
+            std::vector<double> coeff_l1_norm(3);
+            coeff_l1_norm[0] = coeff_tx.l1norm();
+            coeff_l1_norm[1] = coeff_ty.l1norm();
+            coeff_l1_norm[2] = coeff_tz.l1norm();
+            int base_indicator = min_element(coeff_l1_norm.begin(), coeff_l1_norm.end()) - coeff_l1_norm.begin();
 
-            Vector3d model(0.0, 0.0, 0.0);
+            mynt::Vector3 model;
             if (base_indicator == 0) {
-                Matrix2d A;
-                A << coeff_ty, coeff_tz;
-                Vector2d solution = A.inverse() * (-coeff_tx);
-                model(0) = 1.0;
-                model(1) = solution(0);
-                model(2) = solution(1);
+                mynt::Matrix A = mynt::vec2mat(coeff_ty, coeff_tz);
+                mynt::Vector2 solution = A.inv() * (-coeff_tx);
+                model[0] = 1.0;
+                model[1] = solution[0];
+                model[2] = solution[1];
             } else if (base_indicator == 1) {
-                Matrix2d A;
-                A << coeff_tx, coeff_tz;
-                Vector2d solution = A.inverse() * (-coeff_ty);
-                model(0) = solution(0);
-                model(1) = 1.0;
-                model(2) = solution(1);
+                mynt::Matrix A = mynt::vec2mat(coeff_tx, coeff_tz);
+                mynt::Vector2 solution = A.inv() * (-coeff_ty);
+                model[0] = solution[0];
+                model[1] = 1.0;
+                model[2] = solution[1];
             } else {
-                Matrix2d A;
-                A << coeff_tx, coeff_ty;
-                Vector2d solution = A.inverse() * (-coeff_tz);
-                model(0) = solution(0);
-                model(1) = solution(1);
-                model(2) = 1.0;
+                mynt::Matrix A = mynt::vec2mat(coeff_tx, coeff_ty);
+                mynt::Vector2 solution = A.inv() * (-coeff_tz);
+                model[0] = solution[0];
+                model[1] = solution[1];
+                model[2] = 1.0;
             }
 
             // Find all the inliers among point pairs.
-            VectorXd error = coeff_t * model;
+            mynt::VectorX error = coeff_t * model;
 
-            vector<int> inlier_set;
-            for (int i = 0; i < error.rows(); ++i) {
+            std::vector<int> inlier_set;
+            for (int i = 0; i < error.size(); ++i) {
                 if (inlier_markers[i] == 0) continue;
-                if (std::abs(error(i)) < inlier_error * norm_pixel_unit)
+                if (std::abs(error[i]) < inlier_error * norm_pixel_unit)
                     inlier_set.push_back(i);
             }
 
@@ -1109,48 +1056,42 @@ namespace mynt {
                 continue;
 
             // Refit the model using all of the possible inliers.
-            VectorXd coeff_tx_better(inlier_set.size());
-            VectorXd coeff_ty_better(inlier_set.size());
-            VectorXd coeff_tz_better(inlier_set.size());
+            mynt::VectorX coeff_tx_better(inlier_set.size());
+            mynt::VectorX coeff_ty_better(inlier_set.size());
+            mynt::VectorX coeff_tz_better(inlier_set.size());
             for (int i = 0; i < inlier_set.size(); ++i) {
-                coeff_tx_better(i) = coeff_t(inlier_set[i], 0);
-                coeff_ty_better(i) = coeff_t(inlier_set[i], 1);
-                coeff_tz_better(i) = coeff_t(inlier_set[i], 2);
+                coeff_tx_better[i] = coeff_t(inlier_set[i], 0);
+                coeff_ty_better[i] = coeff_t(inlier_set[i], 1);
+                coeff_tz_better[i] = coeff_t(inlier_set[i], 2);
             }
 
-            Vector3d model_better(0.0, 0.0, 0.0);
+            mynt::Vector3 model_better;
             if (base_indicator == 0) {
-                MatrixXd A(inlier_set.size(), 2);
-                A << coeff_ty_better, coeff_tz_better;
-                Vector2d solution =
-                        (A.transpose() * A).inverse() * A.transpose() * (-coeff_tx_better);
-                model_better(0) = 1.0;
-                model_better(1) = solution(0);
-                model_better(2) = solution(1);
+                mynt::Matrix A = mynt::vec2mat(coeff_ty_better, coeff_tz_better);
+                mynt::Vector2 solution = (A.transpose() * A).inv() * A.transpose() * (-coeff_tx_better);
+                model_better[0] = 1.0;
+                model_better[1] = solution[0];
+                model_better[2] = solution[1];
             } else if (base_indicator == 1) {
-                MatrixXd A(inlier_set.size(), 2);
-                A << coeff_tx_better, coeff_tz_better;
-                Vector2d solution =
-                        (A.transpose() * A).inverse() * A.transpose() * (-coeff_ty_better);
-                model_better(0) = solution(0);
-                model_better(1) = 1.0;
-                model_better(2) = solution(1);
+                mynt::Matrix A = mynt::vec2mat(coeff_tx_better, coeff_tz_better);
+                mynt::Vector2 solution = (A.transpose() * A).inv() * A.transpose() * (-coeff_ty_better);
+                model_better[0] = solution[0];
+                model_better[1] = 1.0;
+                model_better[2] = solution[1];
             } else {
-                MatrixXd A(inlier_set.size(), 2);
-                A << coeff_tx_better, coeff_ty_better;
-                Vector2d solution =
-                        (A.transpose() * A).inverse() * A.transpose() * (-coeff_tz_better);
-                model_better(0) = solution(0);
-                model_better(1) = solution(1);
-                model_better(2) = 1.0;
+                mynt::Matrix A = mynt::vec2mat(coeff_tx_better, coeff_ty_better);
+                mynt::Vector2 solution = (A.transpose() * A).inv() * A.transpose() * (-coeff_tz_better);
+                model_better[0] = solution[0];
+                model_better[1] = solution[1];
+                model_better[2] = 1.0;
             }
 
             // Compute the error and upate the best model if possible.
-            VectorXd new_error = coeff_t * model_better;
+            mynt::VectorX new_error = coeff_t * model_better;
 
             double this_error = 0.0;
             for (const auto &inlier_idx : inlier_set)
-                this_error += std::abs(new_error(inlier_idx));
+                this_error += std::abs(new_error[inlier_idx]);
             this_error /= inlier_set.size();
 
             if (inlier_set.size() > best_inlier_set.size()) {
@@ -1165,30 +1106,28 @@ namespace mynt {
         for (const auto &inlier_idx : best_inlier_set)
             inlier_markers[inlier_idx] = 1;
 
-        //printf("inlier ratio: %lu/%lu\n",
-        //    best_inlier_set.size(), inlier_markers.size());
+        //printf("inlier ratio: %lu/%lu\n", best_inlier_set.size(), inlier_markers.size());
 
         return;
     }
 
     void ImageProcessor::publish() {
-        // Publish features.
         feature_msg_ptr_->time_stamp = cam0_curr_img_ptr->time_stamp;
 
-        vector<FeatureIDType> curr_ids(0);
-        vector<Point2f> curr_cam0_points(0);
-        vector<Point2f> curr_cam1_points(0);
+        std::vector<FeatureIDType> curr_ids(0);
+        std::vector<mynt::Point2f> curr_cam0_points(0);
+        std::vector<mynt::Point2f> curr_cam1_points(0);
 
         for (const auto &grid_features : (*curr_features_ptr)) {
             for (const auto &feature : grid_features.second) {
                 curr_ids.push_back(feature.id);
-                curr_cam0_points.push_back(feature.cam0_point);
-                curr_cam1_points.push_back(feature.cam1_point);
+                curr_cam0_points.push_back(mynt::Point2f(feature.cam0_point.x, feature.cam0_point.y));
+                curr_cam1_points.push_back(mynt::Point2f(feature.cam1_point.x, feature.cam1_point.y));
             }
         }
 
-        vector<Point2f> curr_cam0_points_undistorted(0);
-        vector<Point2f> curr_cam1_points_undistorted(0);
+        std::vector<mynt::Point2f> curr_cam0_points_undistorted(0);
+        std::vector<mynt::Point2f> curr_cam1_points_undistorted(0);
 
         undistortPoints(
                 curr_cam0_points, cam0_intrinsics, cam0_distortion_model,
@@ -1197,6 +1136,9 @@ namespace mynt {
                 curr_cam1_points, cam1_intrinsics, cam1_distortion_model,
                 cam1_distortion_coeffs, curr_cam1_points_undistorted);
 
+        debug_ << "\n" << std::fixed << std::setprecision(9) << feature_msg_ptr_->time_stamp
+               << " ================================= " << curr_ids.size() << std::endl;
+
         for (int i = 0; i < curr_ids.size(); ++i) {
             feature_msg_ptr_->features.push_back(FeatureMeasurement());
             feature_msg_ptr_->features[i].id = curr_ids[i];
@@ -1204,153 +1146,79 @@ namespace mynt {
             feature_msg_ptr_->features[i].v0 = curr_cam0_points_undistorted[i].y;
             feature_msg_ptr_->features[i].u1 = curr_cam1_points_undistorted[i].x;
             feature_msg_ptr_->features[i].v1 = curr_cam1_points_undistorted[i].y;
+
+            FeatureMeasurement fm = feature_msg_ptr_->features[i];
+            debug_ << std::fixed << std::setprecision(5) << fm.u0 << ", " << fm.v0 << ", " << fm.u1 << ", " << fm.v1 << std::endl;
         }
 
-        // TODO
-        // feature_pub.publish(feature_msg_ptr);
+        debug_ << std::endl;
 
-        // Publish tracking info.
-        boost::shared_ptr<TrackingInfo> tracking_info_msg_ptr(new TrackingInfo());
-        tracking_info_msg_ptr->time_stamp = cam0_curr_img_ptr->time_stamp;
-        tracking_info_msg_ptr->before_tracking = before_tracking;
-        tracking_info_msg_ptr->after_tracking = after_tracking;
-        tracking_info_msg_ptr->after_matching = after_matching;
-        tracking_info_msg_ptr->after_ransac = after_ransac;
-        // TODO
-        // tracking_info_pub.publish(tracking_info_msg_ptr);
+//        // Publish tracking info.
+//        boost::shared_ptr<TrackingInfo> tracking_info_msg_ptr(new TrackingInfo());
+//        tracking_info_msg_ptr->time_stamp = cam0_curr_img_ptr->time_stamp;
+//        tracking_info_msg_ptr->before_tracking = before_tracking;
+//        tracking_info_msg_ptr->after_tracking = after_tracking;
+//        tracking_info_msg_ptr->after_matching = after_matching;
+//        tracking_info_msg_ptr->after_ransac = after_ransac;
 
         return;
-    }
-
-    void ImageProcessor::drawFeaturesMono() {
-        // Colors for different features.
-        Scalar tracked(0, 255, 0);
-        Scalar new_feature(0, 255, 255);
-
-        static int grid_height =
-                cam0_curr_img_ptr->image.rows / processor_config.grid_row;
-        static int grid_width =
-                cam0_curr_img_ptr->image.cols / processor_config.grid_col;
-
-        // Create an output image.
-        int img_height = cam0_curr_img_ptr->image.rows;
-        int img_width = cam0_curr_img_ptr->image.cols;
-        Mat out_img(img_height, img_width, CV_8UC3);
-        cvtColor(cam0_curr_img_ptr->image, out_img, CV_GRAY2RGB);
-
-        // Draw grids on the image.
-        for (int i = 1; i < processor_config.grid_row; ++i) {
-            Point pt1(0, i * grid_height);
-            Point pt2(img_width, i * grid_height);
-            line(out_img, pt1, pt2, Scalar(255, 0, 0));
-        }
-        for (int i = 1; i < processor_config.grid_col; ++i) {
-            Point pt1(i * grid_width, 0);
-            Point pt2(i * grid_width, img_height);
-            line(out_img, pt1, pt2, Scalar(255, 0, 0));
-        }
-
-        // Collect features ids in the previous frame.
-        vector<FeatureIDType> prev_ids(0);
-        for (const auto &grid_features : *prev_features_ptr)
-            for (const auto &feature : grid_features.second)
-                prev_ids.push_back(feature.id);
-
-        // Collect feature points in the previous frame.
-        map<FeatureIDType, Point2f> prev_points;
-        for (const auto &grid_features : *prev_features_ptr)
-            for (const auto &feature : grid_features.second)
-                prev_points[feature.id] = feature.cam0_point;
-
-        // Collect feature points in the current frame.
-        map<FeatureIDType, Point2f> curr_points;
-        for (const auto &grid_features : *curr_features_ptr)
-            for (const auto &feature : grid_features.second)
-                curr_points[feature.id] = feature.cam0_point;
-
-        // Draw tracked features.
-        for (const auto &id : prev_ids) {
-            if (prev_points.find(id) != prev_points.end() &&
-                curr_points.find(id) != curr_points.end()) {
-                cv::Point2f prev_pt = prev_points[id];
-                cv::Point2f curr_pt = curr_points[id];
-                circle(out_img, curr_pt, 3, tracked);
-                line(out_img, prev_pt, curr_pt, tracked, 1);
-
-                prev_points.erase(id);
-                curr_points.erase(id);
-            }
-        }
-
-        // Draw new features.
-        for (const auto &new_curr_point : curr_points) {
-            cv::Point2f pt = new_curr_point.second;
-            circle(out_img, pt, 3, new_feature, -1);
-        }
-
-        imshow("Feature", out_img);
-        waitKey(5);
     }
 
     void ImageProcessor::drawFeaturesStereo() {
         if (true) {
             // Colors for different features.
-            Scalar tracked(0, 255, 0);
-            Scalar new_feature(0, 255, 255);
+            cv::Scalar tracked(0, 255, 0);
+            cv::Scalar new_feature(0, 0, 255);
 
-            static int grid_height =
-                    cam0_curr_img_ptr->image.rows / processor_config.grid_row;
-            static int grid_width =
-                    cam0_curr_img_ptr->image.cols / processor_config.grid_col;
+            static int grid_height = cam0_curr_img_ptr->image.rows / processor_config.grid_row;
+            static int grid_width  = cam0_curr_img_ptr->image.cols / processor_config.grid_col;
 
             // Create an output image.
             int img_height = cam0_curr_img_ptr->image.rows;
             int img_width = cam0_curr_img_ptr->image.cols;
-            Mat out_img(img_height, img_width * 2, CV_8UC3);
-            cvtColor(cam0_curr_img_ptr->image,
-                     out_img.colRange(0, img_width), CV_GRAY2RGB);
-            cvtColor(cam1_curr_img_ptr->image,
-                     out_img.colRange(img_width, img_width * 2), CV_GRAY2RGB);
+            cv::Mat out_img(img_height, img_width * 2, CV_8UC3);
+            cvtColor(cam0_curr_img_ptr->image, out_img.colRange(0, img_width), CV_GRAY2RGB);
+            cvtColor(cam1_curr_img_ptr->image, out_img.colRange(img_width, img_width * 2), CV_GRAY2RGB);
 
             // Draw grids on the image.
             for (int i = 1; i < processor_config.grid_row; ++i) {
-                Point pt1(0, i * grid_height);
-                Point pt2(img_width * 2, i * grid_height);
-                line(out_img, pt1, pt2, Scalar(255, 0, 0));
+                cv::Point pt1(0, i * grid_height);
+                cv::Point pt2(img_width * 2, i * grid_height);
+                line(out_img, pt1, pt2, cv::Scalar(255, 0, 0));
             }
             for (int i = 1; i < processor_config.grid_col; ++i) {
-                Point pt1(i * grid_width, 0);
-                Point pt2(i * grid_width, img_height);
-                line(out_img, pt1, pt2, Scalar(255, 0, 0));
+                cv::Point pt1(i * grid_width, 0);
+                cv::Point pt2(i * grid_width, img_height);
+                line(out_img, pt1, pt2, cv::Scalar(255, 0, 0));
             }
             for (int i = 1; i < processor_config.grid_col; ++i) {
-                Point pt1(i * grid_width + img_width, 0);
-                Point pt2(i * grid_width + img_width, img_height);
-                line(out_img, pt1, pt2, Scalar(255, 0, 0));
+                cv::Point pt1(i * grid_width + img_width, 0);
+                cv::Point pt2(i * grid_width + img_width, img_height);
+                line(out_img, pt1, pt2, cv::Scalar(255, 0, 0));
             }
 
             // Collect features ids in the previous frame.
-            vector<FeatureIDType> prev_ids(0);
+            std::vector<FeatureIDType> prev_ids(0);
             for (const auto &grid_features : *prev_features_ptr)
                 for (const auto &feature : grid_features.second)
                     prev_ids.push_back(feature.id);
 
             // Collect feature points in the previous frame.
-            map<FeatureIDType, Point2f> prev_cam0_points;
-            map<FeatureIDType, Point2f> prev_cam1_points;
+            std::map<FeatureIDType, cv::Point2f> prev_cam0_points;
+            std::map<FeatureIDType, cv::Point2f> prev_cam1_points;
             for (const auto &grid_features : *prev_features_ptr)
                 for (const auto &feature : grid_features.second) {
-                    prev_cam0_points[feature.id] = feature.cam0_point;
-                    prev_cam1_points[feature.id] = feature.cam1_point;
+                    prev_cam0_points[feature.id] = cv::Point2f(feature.cam0_point.x, feature.cam0_point.y);
+                    prev_cam1_points[feature.id] = cv::Point2f(feature.cam1_point.x, feature.cam1_point.y);
                 }
 
             // Collect feature points in the current frame.
-            map<FeatureIDType, Point2f> curr_cam0_points;
-            map<FeatureIDType, Point2f> curr_cam1_points;
+            std::map<FeatureIDType, cv::Point2f> curr_cam0_points;
+            std::map<FeatureIDType, cv::Point2f> curr_cam1_points;
             for (const auto &grid_features : *curr_features_ptr)
                 for (const auto &feature : grid_features.second) {
-                    curr_cam0_points[feature.id] = feature.cam0_point;
-                    curr_cam1_points[feature.id] = feature.cam1_point;
+                    curr_cam0_points[feature.id] = cv::Point2f(feature.cam0_point.x, feature.cam0_point.y);
+                    curr_cam1_points[feature.id] = cv::Point2f(feature.cam1_point.x, feature.cam1_point.y);
                 }
 
             // Draw tracked features.
@@ -1358,14 +1226,14 @@ namespace mynt {
                 if (prev_cam0_points.find(id) != prev_cam0_points.end() &&
                     curr_cam0_points.find(id) != curr_cam0_points.end()) {
                     cv::Point2f prev_pt0 = prev_cam0_points[id];
-                    cv::Point2f prev_pt1 = prev_cam1_points[id] + Point2f(img_width, 0.0);
+                    cv::Point2f prev_pt1 = prev_cam1_points[id] + cv::Point2f(img_width, 0.0);
                     cv::Point2f curr_pt0 = curr_cam0_points[id];
-                    cv::Point2f curr_pt1 = curr_cam1_points[id] + Point2f(img_width, 0.0);
+                    cv::Point2f curr_pt1 = curr_cam1_points[id] + cv::Point2f(img_width, 0.0);
 
-                    circle(out_img, curr_pt0, 3, tracked, -1);
-                    circle(out_img, curr_pt1, 3, tracked, -1);
-                    line(out_img, prev_pt0, curr_pt0, tracked, 1);
-                    line(out_img, prev_pt1, curr_pt1, tracked, 1);
+                    cv::circle(out_img, curr_pt0, 3, tracked, -1);
+                    cv::circle(out_img, curr_pt1, 3, tracked, -1);
+                    cv::line(out_img, prev_pt0, curr_pt0, tracked, 1);
+                    cv::line(out_img, prev_pt1, curr_pt1, tracked, 1);
 
                     prev_cam0_points.erase(id);
                     prev_cam1_points.erase(id);
@@ -1377,10 +1245,10 @@ namespace mynt {
             // Draw new features.
             for (const auto &new_cam0_point : curr_cam0_points) {
                 cv::Point2f pt0 = new_cam0_point.second;
-                cv::Point2f pt1 = curr_cam1_points[new_cam0_point.first] + Point2f(img_width, 0.0);
+                cv::Point2f pt1 = curr_cam1_points[new_cam0_point.first] + cv::Point2f(img_width, 0.0);
 
-                circle(out_img, pt0, 3, new_feature, -1);
-                circle(out_img, pt1, 3, new_feature, -1);
+                cv::circle(out_img, pt0, 3, new_feature, -1);
+                cv::circle(out_img, pt1, 3, new_feature, -1);
             }
 
             cv::resize(out_img, out_img, cv::Size(out_img.cols*0.5, out_img.rows*0.5));
@@ -1394,7 +1262,7 @@ namespace mynt {
 
     void ImageProcessor::updateFeatureLifetime() {
         for (int code = 0; code < processor_config.grid_row * processor_config.grid_col; ++code) {
-            vector<FeatureMetaData> &features = (*curr_features_ptr)[code];
+            std::vector<FeatureMetaData> &features = (*curr_features_ptr)[code];
             for (const auto &feature : features) {
                 if (feature_lifetime.find(feature.id) == feature_lifetime.end())
                     feature_lifetime[feature.id] = 1;
@@ -1407,7 +1275,7 @@ namespace mynt {
     }
 
     void ImageProcessor::featureLifetimeStatistics() {
-        map<int, int> lifetime_statistics;
+        std::map<int, int> lifetime_statistics;
         for (const auto &data : feature_lifetime) {
             if (lifetime_statistics.find(data.second) == lifetime_statistics.end())
                 lifetime_statistics[data.second] = 1;

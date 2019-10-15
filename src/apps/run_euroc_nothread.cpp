@@ -8,10 +8,12 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 
-#include <Eigen/Core>
+#define VIEW_WINDOW 1
 
+#if VIEW_WINDOW
 #include <pangolin/pangolin.h>
 using namespace pangolin;
+#endif
 
 #include "system.h"
 
@@ -27,6 +29,7 @@ int main() {
 
     system_ptr.reset(new mynt::System(file_cam_imu));
 
+#if VIEW_WINDOW
     // init viewer
     // create pangolin window and plot the trajectory
     pangolin::CreateWindowAndBind("Trajectory Viewer", 640, 480);
@@ -42,6 +45,7 @@ int main() {
     pangolin::View &d_cam = pangolin::CreateDisplay()
             .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -1024.0f / 768.0f)
             .SetHandler(new pangolin::Handler3D(s_cam));
+#endif
 
     // image data
     std::vector<std::vector<std::pair<double,std::string>>> data_img(num_cams);
@@ -107,12 +111,12 @@ int main() {
             std::string nanoseconds = s.substr(s.size() - 9, 9);
             std::string seconds = s.substr(0, s.size() - 9);
             double stamp_ns = std::stoi(seconds) * 1e9 + std::stoi(nanoseconds);
-            Eigen::Vector3d gyr;
+            mynt::Vector3 gyr;
             for (int j = 0; j < 3; ++j) {
                 std::getline(stream, s, ',');
                 gyr[j] = std::stof(s);
             }
-            Eigen::Vector3d acc;
+            mynt::Vector3 acc;
             for (int j = 0; j < 3; ++j) {
                 std::getline(stream, s, ',');
                 acc[j] = std::stof(s);
@@ -134,6 +138,7 @@ int main() {
 
         system_ptr->backend_callback();
 
+#if VIEW_WINDOW
         // view
         {
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -150,20 +155,22 @@ int main() {
             // std::vector<Eigen::Vector3d> path_to_draw = path_to_draw_;
             int nPath_size = system_ptr->path_to_draw_.size();
             for (int i = 0; i < nPath_size - 1; ++i) {
-                glVertex3f(system_ptr->path_to_draw_[i].x(), system_ptr->path_to_draw_[i].y(), system_ptr->path_to_draw_[i].z());
-                glVertex3f(system_ptr->path_to_draw_[i + 1].x(), system_ptr->path_to_draw_[i + 1].y(), system_ptr->path_to_draw_[i + 1].z());
+                glVertex3f(system_ptr->path_to_draw_[i][0], system_ptr->path_to_draw_[i][1], system_ptr->path_to_draw_[i][2]);
+                glVertex3f(system_ptr->path_to_draw_[i + 1][0], system_ptr->path_to_draw_[i + 1][1], system_ptr->path_to_draw_[i + 1][2]);
             }
             glEnd();
 
             pangolin::FinishFrame();
         }
-
+#endif
         idx_img++;
     }
 
     imu_file.close();
 
+#if VIEW_WINDOW
     pangolin::QuitAll();
+#endif
 
     std::cout << "end run_euroc..." << std::endl;
 

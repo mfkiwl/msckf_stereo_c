@@ -10,8 +10,13 @@
 
 #include <map>
 #include <vector>
-#include <Eigen/Dense>
-#include <Eigen/Geometry>
+//#include <Eigen/Dense>
+//#include <Eigen/Geometry>
+
+#include "maths/vector.h"
+#include "kinematics/quarternion.h"
+#include "kinematics/rotation_matrix.h"
+#include "kinematics/transform.h"
 
 #define GRAVITY_ACCELERATION 9.81
 
@@ -21,7 +26,7 @@ namespace mynt {
  * @brief IMUState State for IMU
  */
 struct IMUState {
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+//  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
   typedef long long int StateIDType;
 
   // An unique identifier for the IMU state.
@@ -34,36 +39,31 @@ struct IMUState {
   double time;
 
   // Orientation
-  // Take a vector from the world frame to
-  // the IMU (body) frame.
-  Eigen::Vector4d orientation;
+  // Take a vector from the world frame to the IMU (body) frame.
+  mynt::Quarternion orientation;
 
-  // Position of the IMU (body) frame
-  // in the world frame.
-  Eigen::Vector3d position;
+  // Position of the IMU (body) frame in the world frame.
+  mynt::Vector3 position;
 
-  // Velocity of the IMU (body) frame
-  // in the world frame.
-  Eigen::Vector3d velocity;
+  // Velocity of the IMU (body) frame in the world frame.
+  mynt::Vector3 velocity;
 
-  // Bias for measured angular velocity
-  // and acceleration.
-  Eigen::Vector3d gyro_bias;
-  Eigen::Vector3d acc_bias;
+  // Bias for measured angular velocity and acceleration.
+  mynt::Vector3 gyro_bias;
+  mynt::Vector3 acc_bias;
 
-  // Transformation between the IMU and the
-  // left camera (cam0)
-  Eigen::Matrix3d R_imu_cam0;
-  Eigen::Vector3d t_cam0_imu;
+  // Transformation between the IMU and the left camera (cam0)
+  mynt::RotationMatrix R_imu_cam0;
+  mynt::Vector3 t_cam0_imu;
 
   // These three variables should have the same physical
   // interpretation with `orientation`, `position`, and
   // `velocity`. There three variables are used to modify
   // the transition matrices to make the observability matrix
   // have proper null space.
-  Eigen::Vector4d orientation_null;
-  Eigen::Vector3d position_null;
-  Eigen::Vector3d velocity_null;
+  mynt::Quarternion orientation_null;
+  mynt::Vector3 position_null;
+  mynt::Vector3 velocity_null;
 
   // Process noise
   static double gyro_noise;
@@ -72,34 +72,18 @@ struct IMUState {
   static double acc_bias_noise;
 
   // Gravity vector in the world frame
-  static Eigen::Vector3d gravity;
+  static mynt::Vector3 gravity;
 
   // Transformation offset from the IMU frame to
   // the body frame. The transformation takes a
   // vector from the IMU frame to the body frame.
   // The z axis of the body frame should point upwards.
   // Normally, this transform should be identity.
-  static Eigen::Isometry3d T_imu_body;
+  static mynt::EuclideanTransform T_imu_body;
 
-  IMUState(): id(0), time(0),
-    orientation(Eigen::Vector4d(0, 0, 0, 1)),
-    position(Eigen::Vector3d::Zero()),
-    velocity(Eigen::Vector3d::Zero()),
-    gyro_bias(Eigen::Vector3d::Zero()),
-    acc_bias(Eigen::Vector3d::Zero()),
-    orientation_null(Eigen::Vector4d(0, 0, 0, 1)),
-    position_null(Eigen::Vector3d::Zero()),
-    velocity_null(Eigen::Vector3d::Zero()) {}
+  IMUState(): id(0), time(0) {}
 
-  IMUState(const StateIDType& new_id): id(new_id), time(0),
-    orientation(Eigen::Vector4d(0, 0, 0, 1)),
-    position(Eigen::Vector3d::Zero()),
-    velocity(Eigen::Vector3d::Zero()),
-    gyro_bias(Eigen::Vector3d::Zero()),
-    acc_bias(Eigen::Vector3d::Zero()),
-    orientation_null(Eigen::Vector4d(0, 0, 0, 1)),
-    position_null(Eigen::Vector3d::Zero()),
-    velocity_null(Eigen::Vector3d::Zero()) {}
+  IMUState(const StateIDType& new_id): id(new_id), time(0) {}
 
 };
 

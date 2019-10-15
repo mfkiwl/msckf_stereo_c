@@ -9,7 +9,9 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 
-#include <Eigen/Core>
+#include "maths/vector.h"
+
+//#include <Eigen/Core>
 
 #include <pangolin/pangolin.h>
 using namespace pangolin;
@@ -103,12 +105,12 @@ void process_imu_data() {
         std::string nanoseconds = s.substr(s.size() - 9, 9);
         std::string seconds = s.substr(0, s.size() - 9);
         double stamp_ns = std::stoi(seconds) * 1e9 + std::stoi(nanoseconds);
-        Eigen::Vector3d gyr;
+        mynt::Vector3 gyr;
         for (int j = 0; j < 3; ++j) {
             std::getline(stream, s, ',');
             gyr[j] = std::stof(s);
         }
-        Eigen::Vector3d acc;
+        mynt::Vector3 acc;
         for (int j = 0; j < 3; ++j) {
             std::getline(stream, s, ',');
             acc[j] = std::stof(s);
@@ -178,8 +180,8 @@ void draw() {
         int nPath_size = system_ptr->path_to_draw_.size();
         for(int i = 0; i < nPath_size-1; ++i)
         {
-            glVertex3f(system_ptr->path_to_draw_[i].x(), system_ptr->path_to_draw_[i].y(), system_ptr->path_to_draw_[i].z());
-            glVertex3f(system_ptr->path_to_draw_[i+1].x(), system_ptr->path_to_draw_[i+1].y(), system_ptr->path_to_draw_[i+1].z());
+            glVertex3f(system_ptr->path_to_draw_[i][0], system_ptr->path_to_draw_[i][1], system_ptr->path_to_draw_[i][2]);
+            glVertex3f(system_ptr->path_to_draw_[i+1][0], system_ptr->path_to_draw_[i+1][1], system_ptr->path_to_draw_[i+1][2]);
         }
         glEnd();
 

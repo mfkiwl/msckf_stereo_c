@@ -7,8 +7,10 @@
 
 #include <boost/shared_ptr.hpp>
 
-#include <Eigen/Core>
+//#include <Eigen/Core>
 #include <opencv2/core.hpp>
+
+#include "maths/vector.h"
 
 namespace mynt {
 
@@ -21,8 +23,8 @@ namespace mynt {
 
     struct Imu {
         double time_stamp;
-        Eigen::Vector3d angular_velocity;
-        Eigen::Vector3d linear_acceleration;
+        mynt::Vector3 angular_velocity;
+        mynt::Vector3 linear_acceleration;
     };
     typedef boost::shared_ptr<Imu> ImuPtr;
     typedef boost::shared_ptr<const Imu> ImuConstPtr;
