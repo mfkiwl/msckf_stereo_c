@@ -19,22 +19,9 @@
 
 #include "maths/math_basics.h"
 #include "kinematics/convertor.h"
+#include "cv/undistort.h"
 
 namespace mynt {
-
-    inline cv::Mat matrix3_to_cvmat(const mynt::Matrix &m3) {
-        cv::Mat c(3,3,CV_64FC1);
-        c.at<double>(0, 0) = m3(0, 0);
-        c.at<double>(0, 1) = m3(0, 1);
-        c.at<double>(0, 2) = m3(0, 2);
-        c.at<double>(1, 0) = m3(1, 0);
-        c.at<double>(1, 1) = m3(1, 1);
-        c.at<double>(1, 2) = m3(1, 2);
-        c.at<double>(2, 0) = m3(2, 0);
-        c.at<double>(2, 1) = m3(2, 1);
-        c.at<double>(2, 2) = m3(2, 2);
-        return c;
-    }
 
     inline cv::Vec4d vector4_to_cvvec4d(const mynt::Vector4 &v4) {
         cv::Vec4d c(4,CV_64FC1);
@@ -516,8 +503,7 @@ namespace mynt {
             // Initialize cam1_points by projecting cam0_points to cam1 using the rotation from stereo extrinsics
             const mynt::RotationMatrix R_cam0_cam1 = R_cam1_imu.transpose() * R_cam0_imu;
             std::vector<mynt::Point2f> cam0_points_undistorted;
-            undistortPoints(cam0_points, cam0_intrinsics, cam0_distortion_model, cam0_distortion_coeffs, cam0_points_undistorted,
-                            matrix3_to_cvmat(R_cam0_cam1));
+            undistortPoints(cam0_points, cam0_intrinsics, cam0_distortion_model, cam0_distortion_coeffs, cam0_points_undistorted, R_cam0_cam1);
             cam1_points = distortPoints(cam0_points_undistorted, cam1_intrinsics, cam1_distortion_model, cam1_distortion_coeffs);
         }
 
@@ -736,41 +722,49 @@ namespace mynt {
             const std::string &distortion_model,
             const mynt::Vector4 &distortion_coeffs,
             std::vector<mynt::Point2f> &pts_out,
-            const cv::Matx33d &rectification_matrix,
-            const cv::Vec4d &new_intrinsics) {
+            const mynt::Mat3 &rectification_matrix,
+            const mynt::Vector4 &new_intrinsics) {
 
-        if (pts_in.size() == 0) return;
+        if (pts_in.empty())
+            return;
 
-        const cv::Matx33d K(
-                intrinsics[0], 0.0, intrinsics[2],
-                0.0, intrinsics[1], intrinsics[3],
-                0.0, 0.0, 1.0);
+//        const cv::Matx33d cvK(
+//                intrinsics[0], 0.0, intrinsics[2],
+//                0.0, intrinsics[1], intrinsics[3],
+//                0.0, 0.0, 1.0);
+//
+//        const cv::Matx33d cv_K_new(
+//                new_intrinsics[0], 0.0, new_intrinsics[2],
+//                0.0, new_intrinsics[1], new_intrinsics[3],
+//                0.0, 0.0, 1.0);
 
-        const cv::Matx33d K_new(
-                new_intrinsics[0], 0.0, new_intrinsics[2],
-                0.0, new_intrinsics[1], new_intrinsics[3],
-                0.0, 0.0, 1.0);
+        mynt::Mat3 K = mynt::Matrix::eye(3);
+        K(0,0) = intrinsics[0];
+        K(1,1) = intrinsics[1];
+        K(0,2) = intrinsics[2];
+        K(1,2) = intrinsics[3];
 
-        // TODO
-        std::vector<cv::Point2f> cv_pts_in;
-        for(int i=0; i<pts_in.size(); ++i)
-            cv_pts_in.push_back(cv::Point2f(pts_in[i].x, pts_in[i].y));
+        mynt::Mat3 P = mynt::Matrix::eye(3);
+        P(0,0) = new_intrinsics[0];
+        P(1,1) = new_intrinsics[1];
+        P(0,2) = new_intrinsics[2];
+        P(1,2) = new_intrinsics[3];
+
+        // TODO: undistort_points_fisheye
 
         std::vector<cv::Point2f> cv_pts_out;
 
         if (distortion_model == "radtan") {
-            cv::undistortPoints(cv_pts_in, cv_pts_out, K, vector4_to_cvvec4d(distortion_coeffs), rectification_matrix, K_new);
+//            cv::undistortPoints(cv_pts_in, cv_pts_out, cvK, vector4_to_cvvec4d(distortion_coeffs), rectification_matrix, cv_K_new);
+            mynt::undistort_points(pts_in, pts_out, K, distortion_coeffs, rectification_matrix, P);
         } else if (distortion_model == "equidistant") {
-            cv::fisheye::undistortPoints(cv_pts_in, cv_pts_out, K, vector4_to_cvvec4d(distortion_coeffs), rectification_matrix, K_new);
+//            cv::fisheye::undistortPoints(cv_pts_in, cv_pts_out, cvK, vector4_to_cvvec4d(distortion_coeffs), rectification_matrix, cv_K_new);
+            mynt::undistort_points_fisheye(pts_in, pts_out, K, distortion_coeffs, rectification_matrix, P);
         } else {
             printf("The model %s is unrecognized, use radtan instead...", distortion_model.c_str());
-            cv::undistortPoints(cv_pts_in, cv_pts_out, K, vector4_to_cvvec4d(distortion_coeffs), rectification_matrix, K_new);
+//            cv::undistortPoints(cv_pts_in, cv_pts_out, cvK, vector4_to_cvvec4d(distortion_coeffs), rectification_matrix, cv_K_new);
+            mynt::undistort_points(pts_in, pts_out, K, distortion_coeffs, rectification_matrix, P);
         }
-
-        // TODO
-        pts_out.clear();
-        for(int i=0; i<cv_pts_out.size(); ++i)
-            pts_out.push_back(mynt::Point2f(cv_pts_out[i].x, cv_pts_out[i].y));
 
         return;
     }
@@ -906,12 +900,8 @@ namespace mynt {
         // Undistort all the points.
         std::vector<mynt::Point2f> pts1_undistorted(pts1.size());
         std::vector<mynt::Point2f> pts2_undistorted(pts2.size());
-        undistortPoints(
-                pts1, intrinsics, distortion_model,
-                distortion_coeffs, pts1_undistorted);
-        undistortPoints(
-                pts2, intrinsics, distortion_model,
-                distortion_coeffs, pts2_undistorted);
+        undistortPoints(pts1, intrinsics, distortion_model, distortion_coeffs, pts1_undistorted);
+        undistortPoints(pts2, intrinsics, distortion_model, distortion_coeffs, pts2_undistorted);
 
         // Compenstate the points in the previous image with
         // the relative rotation.
@@ -1128,13 +1118,8 @@ namespace mynt {
 
         std::vector<mynt::Point2f> curr_cam0_points_undistorted(0);
         std::vector<mynt::Point2f> curr_cam1_points_undistorted(0);
-
-        undistortPoints(
-                curr_cam0_points, cam0_intrinsics, cam0_distortion_model,
-                cam0_distortion_coeffs, curr_cam0_points_undistorted);
-        undistortPoints(
-                curr_cam1_points, cam1_intrinsics, cam1_distortion_model,
-                cam1_distortion_coeffs, curr_cam1_points_undistorted);
+        undistortPoints(curr_cam0_points, cam0_intrinsics, cam0_distortion_model, cam0_distortion_coeffs, curr_cam0_points_undistorted);
+        undistortPoints(curr_cam1_points, cam1_intrinsics, cam1_distortion_model, cam1_distortion_coeffs, curr_cam1_points_undistorted);
 
         debug_ << "\n" << std::fixed << std::setprecision(9) << feature_msg_ptr_->time_stamp
                << " ================================= " << curr_ids.size() << std::endl;

@@ -275,8 +275,8 @@ namespace mynt {
                 const std::string &distortion_model,
                 const mynt::Vector4 &distortion_coeffs,
                 std::vector<mynt::Point2f> &pts_out,
-                const cv::Matx33d &rectification_matrix = cv::Matx33d::eye(),
-                const cv::Vec4d &new_intrinsics = cv::Vec4d(1, 1, 0, 0));
+                const mynt::Mat3 &rectification_matrix = mynt::Matrix::eye(3),
+                const mynt::Vector4 &new_intrinsics = mynt::Vector4({1, 1, 0, 0}));
 
         void rescalePoints(std::vector<mynt::Point2f> &pts1, std::vector<mynt::Point2f> &pts2, float &scaling_factor);
 

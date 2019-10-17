@@ -74,7 +74,7 @@ endif()
 
 add_subdirectory(mynt_basic_algthms)
 include_directories(mynt_basic_algthms/include)
-link_libraries(mynt_kinematics)
+link_libraries(mynt_kinematics mynt_cv)
 
 include_directories(include)
 
