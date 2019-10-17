@@ -12,25 +12,16 @@
 #include <algorithm>
 #include <set>
 
-//#include <Eigen/Dense>
 #include <opencv2/calib3d.hpp>
 #include <opencv2/video.hpp>
-#include <kinematics/transform.h>
 
 #include "maths/math_basics.h"
 #include "kinematics/convertor.h"
+#include "kinematics/transform.h"
 #include "cv/undistort.h"
+#include "cv/calib3d.h"
 
 namespace mynt {
-
-    inline cv::Vec4d vector4_to_cvvec4d(const mynt::Vector4 &v4) {
-        cv::Vec4d c(4,CV_64FC1);
-        c[0] = v4[0];
-        c[1] = v4[1];
-        c[2] = v4[2];
-        c[3] = v4[3];
-        return c;
-    }
 
     ImageProcessor::ImageProcessor(YAML::Node cfg_cam_imu) :
             cfg_cam_imu_(cfg_cam_imu),
@@ -774,35 +765,24 @@ namespace mynt {
             const mynt::Vector4 &intrinsics,
             const std::string &distortion_model,
             const mynt::Vector4 &distortion_coeffs) {
+        mynt::Mat3 K = mynt::Matrix::eye(3);
+        K(0,0) = intrinsics[0];
+        K(1,1) = intrinsics[1];
+        K(0,2) = intrinsics[2];
+        K(1,2) = intrinsics[3];
 
-        const cv::Matx33d K(intrinsics[0], 0.0, intrinsics[2],
-                            0.0, intrinsics[1], intrinsics[3],
-                            0.0, 0.0, 1.0);
-
-        std::vector<cv::Point2f> cv_pts_out;
-
-        // TODO
-        std::vector<cv::Point2f> cv_pts_in;
-        for(int i=0; i<pts_in.size(); ++i)
-            cv_pts_in.push_back(cv::Point2f(pts_in[i].x, pts_in[i].y));
+        std::vector<mynt::Point2f> pts_out;
 
         if (distortion_model == "radtan") {
-            std::vector<cv::Point3f> homogenous_pts;
-            cv::convertPointsToHomogeneous(cv_pts_in, homogenous_pts);
-            cv::projectPoints(homogenous_pts, cv::Vec3d::zeros(), cv::Vec3d::zeros(), K, vector4_to_cvvec4d(distortion_coeffs), cv_pts_out);
+            mynt::project_points(pts_in, pts_out, mynt::Vector3(), mynt::Vector3(), K, distortion_coeffs);
         } else if (distortion_model == "equidistant") {
-            cv::fisheye::distortPoints(cv_pts_in, cv_pts_out, K, vector4_to_cvvec4d(distortion_coeffs));
+            // TODO
+//            cv::fisheye::distortPoints(cv_pts_in, cv_pts_out, cvK, vector4_to_cvvec4d(distortion_coeffs));
+            mynt::distort_points_fisheye(pts_in, pts_out, K, distortion_coeffs);
         } else {
             printf("The model %s is unrecognized, using radtan instead...", distortion_model.c_str());
-            std::vector<cv::Point3f> homogenous_pts;
-            cv::convertPointsToHomogeneous(cv_pts_in, homogenous_pts);
-            cv::projectPoints(homogenous_pts, cv::Vec3d::zeros(), cv::Vec3d::zeros(), K, vector4_to_cvvec4d(distortion_coeffs), cv_pts_out);
+            mynt::project_points(pts_in, pts_out, mynt::Vector3(), mynt::Vector3(), K, distortion_coeffs);
         }
-
-        // TODO
-        std::vector<mynt::Point2f> pts_out;
-        for(int i=0; i<cv_pts_out.size(); ++i)
-            pts_out.push_back(mynt::Point2f(cv_pts_out[i].x, cv_pts_out[i].y));
 
         return pts_out;
     }
