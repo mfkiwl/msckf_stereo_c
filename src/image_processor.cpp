@@ -292,8 +292,7 @@ namespace mynt {
         mynt::Matrix H = K * R_p_c * K.inv();
 
         for (int i = 0; i < input_pts.size(); ++i) {
-            mynt::FLOAT p1val[3] = {input_pts[i].x, input_pts[i].y, 1.0f};
-            mynt::Vector3 p1(p1val);
+            mynt::Vector3 p1({input_pts[i].x, input_pts[i].y, 1.0f});
             mynt::Vector3 p2 = H * p1;
             compensated_pts[i].x = p2[0] / p2[2];
             compensated_pts[i].y = p2[1] / p2[2];
@@ -807,13 +806,8 @@ namespace mynt {
 
         // Compute the mean angular velocity in the IMU frame.
         mynt::Vector3 mean_ang_vel;
-        for (auto iter = begin_iter; iter < end_iter; ++iter) {
-            FLOAT val[3];
-            val[0] = iter->angular_velocity[0];
-            val[1] = iter->angular_velocity[1];
-            val[2] = iter->angular_velocity[2];
-            mean_ang_vel += mynt::Vector3(val);
-        }
+        for (auto iter = begin_iter; iter < end_iter; ++iter)
+            mean_ang_vel += iter->angular_velocity;
 
         if (end_iter - begin_iter > 0)
             mean_ang_vel *= 1.0f / (end_iter - begin_iter);
@@ -824,10 +818,8 @@ namespace mynt {
 
         // Compute the relative rotation.
         double dtime = cam0_curr_img_ptr->time_stamp - cam0_prev_img_ptr->time_stamp;
-        cam0_R_p_c = mynt::rodrigues(cam0_mean_ang_vel * dtime);
-        cam1_R_p_c = mynt::rodrigues(cam1_mean_ang_vel * dtime);
-        cam0_R_p_c = ~cam0_R_p_c;
-        cam1_R_p_c = ~cam1_R_p_c;
+        cam0_R_p_c = mynt::rodrigues(cam0_mean_ang_vel * dtime).transpose();
+        cam1_R_p_c = mynt::rodrigues(cam1_mean_ang_vel * dtime).transpose();
 
         // Delete the useless and used imu messages.
         imu_msg_buffer.erase(imu_msg_buffer.begin(), end_iter);
