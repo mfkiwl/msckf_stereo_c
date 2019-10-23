@@ -460,7 +460,7 @@ namespace mynt {
                     state_server.state_cov.block(21, 0, state_server.state_cov.rows() - 21, 21) * Phi.transpose());
         }
 
-        mynt::Matrix state_cov_fixed = (state_server.state_cov + ~state_server.state_cov) * 0.5;
+        mynt::Matrix state_cov_fixed = (state_server.state_cov + state_server.state_cov.transpose()) * 0.5;
         state_server.state_cov = state_cov_fixed;
 
         // Update the state correspondes to null space.
