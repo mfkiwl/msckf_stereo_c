@@ -369,10 +369,10 @@ namespace mynt {
         boost::shared_ptr<GridFeatures> curr_features_ptr;
 
         // Number of features after each outlier removal step.
-        int before_tracking;
-        int after_tracking;
-        int after_matching;
-        int after_ransac;
+        int before_tracking = 0;
+        int after_tracking = 0;
+        int after_matching = 0;
+        int after_ransac = 0;
 
         // Debugging
         std::map<FeatureIDType, int> feature_lifetime;

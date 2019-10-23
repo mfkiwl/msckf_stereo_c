@@ -341,12 +341,12 @@ namespace mynt {
         predictFeatureTracking(prev_cam0_points, cam0_R_p_c, cam0_intrinsics, curr_cam0_points);
 
         // TODO
-        std::vector<cv::Point2f> cv_curr_cam0_points;
+        std::vector<cv::Point2f> cv_curr_cam0_points(curr_cam0_points.size());
         for(int i=0; i<curr_cam0_points.size(); ++i)
-            cv_curr_cam0_points.push_back(cv::Point2f(curr_cam0_points[i].x, curr_cam0_points[i].y));
-        std::vector<cv::Point2f> cv_prev_cam0_points;
+            cv_curr_cam0_points[i] = cv::Point2f(curr_cam0_points[i].x, curr_cam0_points[i].y);
+        std::vector<cv::Point2f> cv_prev_cam0_points(prev_cam0_points.size());
         for(int i=0; i<prev_cam0_points.size(); ++i)
-            cv_prev_cam0_points.push_back(cv::Point2f(prev_cam0_points[i].x, prev_cam0_points[i].y));
+            cv_prev_cam0_points[i] = cv::Point2f(prev_cam0_points[i].x, prev_cam0_points[i].y);
 
         cv::calcOpticalFlowPyrLK(
                 prev_cam0_pyramid_, curr_cam0_pyramid_,
@@ -1093,8 +1093,8 @@ namespace mynt {
         undistortPoints(curr_cam0_points, cam0_intrinsics, cam0_distortion_model, cam0_distortion_coeffs, curr_cam0_points_undistorted);
         undistortPoints(curr_cam1_points, cam1_intrinsics, cam1_distortion_model, cam1_distortion_coeffs, curr_cam1_points_undistorted);
 
-        debug_ << "\n" << std::fixed << std::setprecision(9) << feature_msg_ptr_->time_stamp
-               << " ================================= " << curr_ids.size() << std::endl;
+//        debug_ << std::fixed << std::setprecision(9) << feature_msg_ptr_->time_stamp
+//               << " ================================= " << curr_ids.size() << std::endl;
 
         for (int i = 0; i < curr_ids.size(); ++i) {
             feature_msg_ptr_->features.push_back(FeatureMeasurement());
@@ -1104,19 +1104,26 @@ namespace mynt {
             feature_msg_ptr_->features[i].u1 = curr_cam1_points_undistorted[i].x;
             feature_msg_ptr_->features[i].v1 = curr_cam1_points_undistorted[i].y;
 
-            FeatureMeasurement fm = feature_msg_ptr_->features[i];
-            debug_ << std::fixed << std::setprecision(5) << fm.u0 << ", " << fm.v0 << ", " << fm.u1 << ", " << fm.v1 << std::endl;
+//            FeatureMeasurement fm = feature_msg_ptr_->features[i];
+//            debug_ << std::fixed << std::setprecision(5) << fm.u0 << ", " << fm.v0 << ", " << fm.u1 << ", " << fm.v1 << std::endl;
         }
 
-        debug_ << std::endl;
+//        debug_ << std::endl;
 
-//        // Publish tracking info.
-//        boost::shared_ptr<TrackingInfo> tracking_info_msg_ptr(new TrackingInfo());
-//        tracking_info_msg_ptr->time_stamp = cam0_curr_img_ptr->time_stamp;
-//        tracking_info_msg_ptr->before_tracking = before_tracking;
-//        tracking_info_msg_ptr->after_tracking = after_tracking;
-//        tracking_info_msg_ptr->after_matching = after_matching;
-//        tracking_info_msg_ptr->after_ransac = after_ransac;
+        // Publish tracking info.
+        boost::shared_ptr<TrackingInfo> tracking_info_msg_ptr(new TrackingInfo());
+        tracking_info_msg_ptr->time_stamp = cam0_curr_img_ptr->time_stamp;
+        tracking_info_msg_ptr->before_tracking = before_tracking;
+        tracking_info_msg_ptr->after_tracking = after_tracking;
+        tracking_info_msg_ptr->after_matching = after_matching;
+        tracking_info_msg_ptr->after_ransac = after_ransac;
+
+        debug_ << std::fixed << std::setprecision(9)
+               << tracking_info_msg_ptr->time_stamp << ": "
+               << tracking_info_msg_ptr->before_tracking << ", "
+               << tracking_info_msg_ptr->after_tracking << ", "
+               << tracking_info_msg_ptr->after_matching << ", "
+               << tracking_info_msg_ptr->after_ransac << std::endl;
 
         return;
     }
