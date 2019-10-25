@@ -429,25 +429,25 @@ namespace mynt {
         // Number of features left after stereo matching.
         after_matching = curr_matched_cam0_points.size();
 
-        // Step 2 and 3: RANSAC on temporal image pairs of cam0 and cam1.
-        std::vector<int> cam0_ransac_inliers(0);
-        twoPointRansac(prev_matched_cam0_points, curr_matched_cam0_points,
-                       cam0_R_p_c, cam0_intrinsics, cam0_distortion_model,
-                       cam0_distortion_coeffs, processor_config.ransac_threshold,
-                       0.99, cam0_ransac_inliers);
-
-        std::vector<int> cam1_ransac_inliers(0);
-        twoPointRansac(prev_matched_cam1_points, curr_matched_cam1_points,
-                       cam1_R_p_c, cam1_intrinsics, cam1_distortion_model,
-                       cam1_distortion_coeffs, processor_config.ransac_threshold,
-                       0.99, cam1_ransac_inliers);
+//        // Step 2 and 3: RANSAC on temporal image pairs of cam0 and cam1.
+//        std::vector<int> cam0_ransac_inliers(0);
+//        twoPointRansac(prev_matched_cam0_points, curr_matched_cam0_points,
+//                       cam0_R_p_c, cam0_intrinsics, cam0_distortion_model,
+//                       cam0_distortion_coeffs, processor_config.ransac_threshold,
+//                       0.99, cam0_ransac_inliers);
+//
+//        std::vector<int> cam1_ransac_inliers(0);
+//        twoPointRansac(prev_matched_cam1_points, curr_matched_cam1_points,
+//                       cam1_R_p_c, cam1_intrinsics, cam1_distortion_model,
+//                       cam1_distortion_coeffs, processor_config.ransac_threshold,
+//                       0.99, cam1_ransac_inliers);
 
         // Number of features after ransac.
         after_ransac = 0;
 
-        for (int i = 0; i < cam0_ransac_inliers.size(); ++i) {
-            if (cam0_ransac_inliers[i] == 0 || cam1_ransac_inliers[i] == 0)
-                continue;
+        for (int i = 0; i < curr_matched_cam0_points.size(); ++i) {
+//            if (cam0_ransac_inliers[i] == 0 || cam1_ransac_inliers[i] == 0)
+//                continue;
             int row = static_cast<int>(curr_matched_cam0_points[i].y / grid_height);
             int col = static_cast<int>(curr_matched_cam0_points[i].x / grid_width);
             int code = row * processor_config.grid_col + col;
