@@ -122,7 +122,9 @@ namespace mynt {
         if (!loadParameters())
             return false;
         std::cout << "Finish loading parameters..." << std::endl;
-        detector_ptr = cv::FastFeatureDetector::create(processor_config.fast_threshold);
+//        detector_ptr = cv::FastFeatureDetector::create(processor_config.fast_threshold);
+
+        detector_ = CornerDetector(30, 47, processor_config.fast_threshold);
 
         debug_.open("debug_imageprocessor.txt");
 
@@ -237,13 +239,17 @@ namespace mynt {
         static int grid_width  = img.cols / processor_config.grid_col;
 
         // Detect new features on the frist image.
-        std::vector<cv::KeyPoint> new_features(0);
-        detector_ptr->detect(img, new_features);
+//        std::vector<cv::KeyPoint> new_features(0);
+//        detector_ptr->detect(img, new_features);
+
+        std::vector<mynt::Point2f> new_features;
+        std::vector<double> new_features_responses;
+        detector_.detect_features(img, new_features, new_features_responses);
 
         // Find the stereo matched points for the newly detected features.
         std::vector<mynt::Point2f> cam0_points(new_features.size());
         for (int i = 0; i < new_features.size(); ++i)
-            cam0_points[i] = mynt::Point2f(new_features[i].pt.x, new_features[i].pt.y);
+            cam0_points[i] = new_features[i];
 
         std::vector<mynt::Point2f> cam1_points(0);
         std::vector<unsigned char> inlier_markers(0);
@@ -257,7 +263,7 @@ namespace mynt {
                 continue;
             cam0_inliers.push_back(cam0_points[i]);
             cam1_inliers.push_back(cam1_points[i]);
-            response_inliers.push_back(new_features[i].response);
+            response_inliers.push_back(new_features_responses[i]);
         }
 
         // Group the features into grids
@@ -371,12 +377,12 @@ namespace mynt {
         predictFeatureTracking(prev_cam0_points, cam0_R_p_c, cam0_intrinsics, curr_cam0_points);
 
         // TODO
-        std::vector<cv::Point2f> cv_curr_cam0_points(curr_cam0_points.size());
-        for(int i=0; i<curr_cam0_points.size(); ++i)
-            cv_curr_cam0_points[i] = cv::Point2f(curr_cam0_points[i].x, curr_cam0_points[i].y);
-        std::vector<cv::Point2f> cv_prev_cam0_points(prev_cam0_points.size());
-        for(int i=0; i<prev_cam0_points.size(); ++i)
-            cv_prev_cam0_points[i] = cv::Point2f(prev_cam0_points[i].x, prev_cam0_points[i].y);
+//        std::vector<cv::Point2f> cv_curr_cam0_points(curr_cam0_points.size());
+//        for(int i=0; i<curr_cam0_points.size(); ++i)
+//            cv_curr_cam0_points[i] = cv::Point2f(curr_cam0_points[i].x, curr_cam0_points[i].y);
+//        std::vector<cv::Point2f> cv_prev_cam0_points(prev_cam0_points.size());
+//        for(int i=0; i<prev_cam0_points.size(); ++i)
+//            cv_prev_cam0_points[i] = cv::Point2f(prev_cam0_points[i].x, prev_cam0_points[i].y);
 
 //        cv::calcOpticalFlowPyrLK(
 //                prev_cam0_pyramid_, curr_cam0_pyramid_,
@@ -389,10 +395,10 @@ namespace mynt {
 //                             processor_config.track_precision),
 //                cv::OPTFLOW_USE_INITIAL_FLOW);
 
-        mynt::OpticalFlowMultiLevel(prev_cam0_pyramid_, curr_cam0_pyramid_, cv_prev_cam0_points, cv_curr_cam0_points, track_inliers, 15, 30);
+        mynt::OpticalFlowMultiLevel(prev_cam0_pyramid_, curr_cam0_pyramid_, prev_cam0_points, curr_cam0_points, track_inliers, 15, 30);
 
-        for(int i=0; i<cv_curr_cam0_points.size(); ++i)
-            curr_cam0_points[i] = mynt::Point2f(cv_curr_cam0_points[i].x, cv_curr_cam0_points[i].y);
+//        for(int i=0; i<cv_curr_cam0_points.size(); ++i)
+//            curr_cam0_points[i] = mynt::Point2f(cv_curr_cam0_points[i].x, cv_curr_cam0_points[i].y);
 
         // Mark those tracked points out of the image region as untracked.
         for (int i = 0; i < curr_cam0_points.size(); ++i) {
@@ -530,12 +536,12 @@ namespace mynt {
         }
 
         // TODO
-        std::vector<cv::Point2f> cv_cam0_points(cam0_points.size());
-        for(int i=0; i<cam0_points.size(); ++i)
-            cv_cam0_points[i] = cv::Point2f(cam0_points[i].x, cam0_points[i].y);
-        std::vector<cv::Point2f> cv_cam1_points(cam1_points.size());
-        for(int i=0; i<cam1_points.size(); ++i)
-            cv_cam1_points[i] = cv::Point2f(cam1_points[i].x, cam1_points[i].y);
+//        std::vector<cv::Point2f> cv_cam0_points(cam0_points.size());
+//        for(int i=0; i<cam0_points.size(); ++i)
+//            cv_cam0_points[i] = cv::Point2f(cam0_points[i].x, cam0_points[i].y);
+//        std::vector<cv::Point2f> cv_cam1_points(cam1_points.size());
+//        for(int i=0; i<cam1_points.size(); ++i)
+//            cv_cam1_points[i] = cv::Point2f(cam1_points[i].x, cam1_points[i].y);
 
 //        // Track features using LK optical flow method.
 //        cv::calcOpticalFlowPyrLK(curr_cam0_pyramid_, curr_cam1_pyramid_,
@@ -548,10 +554,10 @@ namespace mynt {
 //                                          processor_config.track_precision),
 //                             cv::OPTFLOW_USE_INITIAL_FLOW);
 
-        mynt::OpticalFlowMultiLevel(curr_cam0_pyramid_, curr_cam1_pyramid_, cv_cam0_points, cv_cam1_points, inlier_markers, 15, 30);
+        mynt::OpticalFlowMultiLevel(curr_cam0_pyramid_, curr_cam1_pyramid_, cam0_points, cam1_points, inlier_markers, 15, 30);
 
-        for(int i=0; i<cv_cam1_points.size(); ++i)
-            cam1_points[i] = mynt::Point2f(cv_cam1_points[i].x, cv_cam1_points[i].y);
+//        for(int i=0; i<cv_cam1_points.size(); ++i)
+//            cam1_points[i] = mynt::Point2f(cv_cam1_points[i].x, cv_cam1_points[i].y);
 
         // Mark those tracked points out of the image region as untracked.
         for (int i = 0; i < cam1_points.size(); ++i) {
@@ -616,29 +622,35 @@ namespace mynt {
                 const int y = static_cast<int>(feature.cam0_point.y);
                 const int x = static_cast<int>(feature.cam0_point.x);
 
-                int up_lim = y - 2, bottom_lim = y + 3, left_lim = x - 2, right_lim = x + 3;
-                if (up_lim < 0) up_lim = 0;
-                if (bottom_lim > curr_img.rows) bottom_lim = curr_img.rows;
-                if (left_lim < 0) left_lim = 0;
-                if (right_lim > curr_img.cols) right_lim = curr_img.cols;
+//                int up_lim = y - 2, bottom_lim = y + 3, left_lim = x - 2, right_lim = x + 3;
+//                if (up_lim < 0) up_lim = 0;
+//                if (bottom_lim > curr_img.rows) bottom_lim = curr_img.rows;
+//                if (left_lim < 0) left_lim = 0;
+//                if (right_lim > curr_img.cols) right_lim = curr_img.cols;
+//
+//                cv::Range row_range(up_lim, bottom_lim);
+//                cv::Range col_range(left_lim, right_lim);
+//                mask(row_range, col_range) = 0;
 
-                cv::Range row_range(up_lim, bottom_lim);
-                cv::Range col_range(left_lim, right_lim);
-                mask(row_range, col_range) = 0;
+                detector_.set_grid_position(mynt::Point2f(x, y));
             }
         }
 
         // Detect new features.
-        std::vector<cv::KeyPoint> new_features(0);
-        detector_ptr->detect(curr_img, new_features, mask);
+//        std::vector<cv::KeyPoint> new_features(0);
+//        detector_ptr->detect(curr_img, new_features, mask);
+
+        std::vector<mynt::Point2f> new_features;
+        std::vector<double> new_features_responses;
+        detector_.detect_features(curr_img, new_features, new_features_responses);
 
         // Collect the new detected features based on the grid.
         // Select the ones with top response within each grid afterwards.
-        std::vector<std::vector<cv::KeyPoint> > new_feature_sieve(processor_config.grid_row * processor_config.grid_col);
-        for (const auto &feature : new_features) {
-            int row = static_cast<int>(feature.pt.y / grid_height);
-            int col = static_cast<int>(feature.pt.x / grid_width);
-            new_feature_sieve[row * processor_config.grid_col + col].push_back(feature);
+        std::vector<std::vector<std::pair<mynt::Point2f, double> > > new_feature_sieve(processor_config.grid_row * processor_config.grid_col);
+        for (int i=0; i<new_features.size(); ++i) {
+            int row = static_cast<int>(new_features[i].y / grid_height);
+            int col = static_cast<int>(new_features[i].x / grid_width);
+            new_feature_sieve[row * processor_config.grid_col + col].push_back(std::make_pair(new_features[i], new_features_responses[i]));
         }
 
         new_features.clear();
@@ -647,7 +659,9 @@ namespace mynt {
                 std::sort(item.begin(), item.end(), &ImageProcessor::keyPointCompareByResponse);
                 item.erase(item.begin() + processor_config.grid_max_feature_num, item.end());
             }
-            new_features.insert(new_features.end(), item.begin(), item.end());
+//            new_features.insert(new_features.end(), item.begin(), item.end());
+            std::transform(item.begin(), item.end(), std::back_inserter(new_features),
+                    [](const std::pair<mynt::Point2f, double> &pt){ return pt.first; });
         }
 
         int detected_new_features = new_features.size();
@@ -655,7 +669,7 @@ namespace mynt {
         // Find the stereo matched points for the newly detected features.
         std::vector<mynt::Point2f> cam0_points(new_features.size());
         for (int i = 0; i < new_features.size(); ++i)
-            cam0_points[i] = mynt::Point2f(new_features[i].pt.x, new_features[i].pt.y);
+            cam0_points[i] = new_features[i];
 
         std::vector<mynt::Point2f> cam1_points(0);
         std::vector<unsigned char> inlier_markers(0);
@@ -669,7 +683,7 @@ namespace mynt {
                 continue;
             cam0_inliers.push_back(cam0_points[i]);
             cam1_inliers.push_back(cam1_points[i]);
-            response_inliers.push_back(new_features[i].response);
+            response_inliers.push_back(new_features_responses[i]);
         }
 
         int matched_new_features = cam0_inliers.size();
@@ -777,7 +791,7 @@ namespace mynt {
 
         // TODO: undistort_points_fisheye
 
-        std::vector<cv::Point2f> cv_pts_out;
+//        std::vector<cv::Point2f> cv_pts_out;
 
         if (distortion_model == "radtan") {
 //            cv::undistortPoints(cv_pts_in, cv_pts_out, cvK, vector4_to_cvvec4d(distortion_coeffs), rectification_matrix, cv_K_new);

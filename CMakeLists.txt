@@ -30,7 +30,7 @@ if(Eigen3_FOUND)
     include_directories(${EIGEN3_INCLUDE_DIR})
 endif()
 
-find_package(OpenCV REQUIRED COMPONENTS core highgui imgproc features2d calib3d video)
+find_package(OpenCV REQUIRED COMPONENTS core highgui imgproc) # features2d calib3d video
 if(OpenCV_FOUND)
     include_directories(${OpenCV_INCLUDE_DIRS})
     link_libraries(${OpenCV_LIBS})

@@ -21,6 +21,7 @@
 #include "common/config_io.h"
 #include "maths/vector.h"
 #include "cv/types.h"
+#include "cv/corner_detector.h"
 #include "kinematics/rotation_matrix.h"
 
 namespace mynt {
@@ -115,11 +116,11 @@ namespace mynt {
          *    Compare two keypoints based on the response.
          */
         static bool keyPointCompareByResponse(
-                const cv::KeyPoint &pt1,
-                const cv::KeyPoint &pt2) {
+                const std::pair<mynt::Point2f, double> &pt1,
+                const std::pair<mynt::Point2f, double> &pt2) {
             // Keypoint with higher response will be at the
             // beginning of the vector.
-            return pt1.response > pt2.response;
+            return pt1.second > pt2.second;
         }
 
         /*
@@ -333,7 +334,8 @@ namespace mynt {
 
         // Feature detector
         ProcessorConfig processor_config;
-        cv::Ptr<cv::Feature2D> detector_ptr;
+//        cv::Ptr<cv::Feature2D> detector_ptr;
+        CornerDetector detector_;
 
         // IMU message buffer.
         std::vector<mynt::Imu> imu_msg_buffer;
