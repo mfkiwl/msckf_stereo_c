@@ -20,6 +20,7 @@
 #include "kinematics/transform.h"
 #include "cv/undistort.h"
 #include "cv/calib3d.h"
+#include "cv/visual_tracking.h"
 
 namespace mynt {
 
@@ -186,18 +187,47 @@ namespace mynt {
 
     void ImageProcessor::createImagePyramids() {
         const cv::Mat &curr_cam0_img = cam0_curr_img_ptr->image;
-        cv::buildOpticalFlowPyramid(
-                curr_cam0_img, curr_cam0_pyramid_,
-                cv::Size(processor_config.patch_size, processor_config.patch_size),
-                processor_config.pyramid_levels, true, cv::BORDER_REFLECT_101,
-                cv::BORDER_CONSTANT, false);
-
         const cv::Mat &curr_cam1_img = cam1_curr_img_ptr->image;
-        cv::buildOpticalFlowPyramid(
-                curr_cam1_img, curr_cam1_pyramid_,
-                cv::Size(processor_config.patch_size, processor_config.patch_size),
-                processor_config.pyramid_levels, true, cv::BORDER_REFLECT_101,
-                cv::BORDER_CONSTANT, false);
+
+//        cv::buildOpticalFlowPyramid(
+//                curr_cam0_img, curr_cam0_pyramid_,
+//                cv::Size(processor_config.patch_size, processor_config.patch_size),
+//                processor_config.pyramid_levels, true, cv::BORDER_REFLECT_101,
+//                cv::BORDER_CONSTANT, false);
+//
+//        cv::buildOpticalFlowPyramid(
+//                curr_cam1_img, curr_cam1_pyramid_,
+//                cv::Size(processor_config.patch_size, processor_config.patch_size),
+//                processor_config.pyramid_levels, true, cv::BORDER_REFLECT_101,
+//                cv::BORDER_CONSTANT, false);
+
+        curr_cam0_pyramid_.clear();
+        curr_cam1_pyramid_.clear();
+        cv::Mat tmp1, tmp2;
+#if 1
+        for (int i = 0; i < 4; i++) { // the downsampling step of the Gaussian pyramid construction
+            if(i == 0) {
+                curr_cam0_pyramid_.push_back(curr_cam0_img);
+                curr_cam1_pyramid_.push_back(curr_cam1_img);
+                continue;
+            }
+            cv::Mat img1_last = curr_cam0_pyramid_[i-1];
+            cv::pyrDown(img1_last, tmp1, img1_last.size() / 2);
+            curr_cam0_pyramid_.push_back(tmp1);
+            cv::Mat img2_last = curr_cam1_pyramid_[i-1];
+            cv::pyrDown(img2_last, tmp2, img2_last.size() / 2);
+            curr_cam1_pyramid_.push_back(tmp2);
+        }
+#else
+        double scale = 1.0;
+        for (int i = 0; i < 4; i++) {
+            cv::resize(curr_cam0_img, tmp1, cv::Size(curr_cam0_img.cols * scale, curr_cam0_img.rows * scale));
+            curr_cam0_pyramid_.push_back(tmp1);
+            cv::resize(curr_cam1_img, tmp2, cv::Size(curr_cam1_img.cols * scale, curr_cam1_img.rows * scale));
+            curr_cam1_pyramid_.push_back(tmp2);
+            scale *= 0.5;
+        }
+#endif
     }
 
     void ImageProcessor::initializeFirstFrame() {
@@ -348,16 +378,18 @@ namespace mynt {
         for(int i=0; i<prev_cam0_points.size(); ++i)
             cv_prev_cam0_points[i] = cv::Point2f(prev_cam0_points[i].x, prev_cam0_points[i].y);
 
-        cv::calcOpticalFlowPyrLK(
-                prev_cam0_pyramid_, curr_cam0_pyramid_,
-                cv_prev_cam0_points, cv_curr_cam0_points,
-                track_inliers, cv::noArray(),
-                cv::Size(processor_config.patch_size, processor_config.patch_size),
-                processor_config.pyramid_levels,
-                cv::TermCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS,
-                             processor_config.max_iteration,
-                             processor_config.track_precision),
-                cv::OPTFLOW_USE_INITIAL_FLOW);
+//        cv::calcOpticalFlowPyrLK(
+//                prev_cam0_pyramid_, curr_cam0_pyramid_,
+//                cv_prev_cam0_points, cv_curr_cam0_points,
+//                track_inliers, cv::noArray(),
+//                cv::Size(processor_config.patch_size, processor_config.patch_size),
+//                processor_config.pyramid_levels,
+//                cv::TermCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS,
+//                             processor_config.max_iteration,
+//                             processor_config.track_precision),
+//                cv::OPTFLOW_USE_INITIAL_FLOW);
+
+        mynt::OpticalFlowMultiLevel(prev_cam0_pyramid_, curr_cam0_pyramid_, cv_prev_cam0_points, cv_curr_cam0_points, track_inliers, 15, 30);
 
         for(int i=0; i<cv_curr_cam0_points.size(); ++i)
             curr_cam0_points[i] = mynt::Point2f(cv_curr_cam0_points[i].x, cv_curr_cam0_points[i].y);
@@ -505,23 +537,26 @@ namespace mynt {
         for(int i=0; i<cam1_points.size(); ++i)
             cv_cam1_points[i] = cv::Point2f(cam1_points[i].x, cam1_points[i].y);
 
-        // Track features using LK optical flow method.
-        cv::calcOpticalFlowPyrLK(curr_cam0_pyramid_, curr_cam1_pyramid_,
-                                 cv_cam0_points, cv_cam1_points,
-                             inlier_markers, cv::noArray(),
-                             cv::Size(processor_config.patch_size, processor_config.patch_size),
-                             processor_config.pyramid_levels,
-                             cv::TermCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS,
-                                          processor_config.max_iteration,
-                                          processor_config.track_precision),
-                             cv::OPTFLOW_USE_INITIAL_FLOW);
+//        // Track features using LK optical flow method.
+//        cv::calcOpticalFlowPyrLK(curr_cam0_pyramid_, curr_cam1_pyramid_,
+//                                 cv_cam0_points, cv_cam1_points,
+//                             inlier_markers, cv::noArray(),
+//                             cv::Size(processor_config.patch_size, processor_config.patch_size),
+//                             processor_config.pyramid_levels,
+//                             cv::TermCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS,
+//                                          processor_config.max_iteration,
+//                                          processor_config.track_precision),
+//                             cv::OPTFLOW_USE_INITIAL_FLOW);
+
+        mynt::OpticalFlowMultiLevel(curr_cam0_pyramid_, curr_cam1_pyramid_, cv_cam0_points, cv_cam1_points, inlier_markers, 15, 30);
 
         for(int i=0; i<cv_cam1_points.size(); ++i)
             cam1_points[i] = mynt::Point2f(cv_cam1_points[i].x, cv_cam1_points[i].y);
 
         // Mark those tracked points out of the image region as untracked.
         for (int i = 0; i < cam1_points.size(); ++i) {
-            if (inlier_markers[i] == 0) continue;
+            if (inlier_markers[i] == 0)
+                continue;
             if (cam1_points[i].y < 0 ||
                 cam1_points[i].y > cam1_curr_img_ptr->image.rows - 1 ||
                 cam1_points[i].x < 0 ||
