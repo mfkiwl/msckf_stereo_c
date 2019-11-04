@@ -12,10 +12,10 @@
 #include <map>
 #include <fstream>
 
-#include <opencv2/core.hpp>
-#include <opencv2/highgui.hpp>
-#include <opencv2/imgproc.hpp>
-#include <opencv2/features2d.hpp>
+//#include <opencv2/core.hpp>
+//#include <opencv2/highgui.hpp>
+//#include <opencv2/imgproc.hpp>
+//#include <opencv2/features2d.hpp>
 
 #include "common/data_msg.h"
 #include "common/config_io.h"
@@ -362,9 +362,9 @@ namespace mynt {
         boost::shared_ptr<mynt::Image> cam1_curr_img_ptr;
 
         // Pyramids for previous and current image
-        std::vector<cv::Mat> prev_cam0_pyramid_;
-        std::vector<cv::Mat> curr_cam0_pyramid_;
-        std::vector<cv::Mat> curr_cam1_pyramid_;
+        std::vector<mynt::YImg8> prev_cam0_pyramid_;
+        std::vector<mynt::YImg8> curr_cam0_pyramid_;
+        std::vector<mynt::YImg8> curr_cam1_pyramid_;
 
         // Features in the previous and current image.
         boost::shared_ptr<GridFeatures> prev_features_ptr;

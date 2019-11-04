@@ -67,7 +67,11 @@ void process_image_data() {
         for(int j=0; j<num_cams; ++j) {
             imgs[j].time_stamp = data_img[j][i].first*1e-9; // to seconds;
             std::string img_path = euroc_dir + "/cam" + std::to_string(j) + "/data/" + data_img[j][i].second;
-            imgs[j].image = cv::imread(img_path, 0);
+//            imgs[j].image = cv::imread(img_path, 0);
+            cv::Mat mat_img = cv::imread(img_path, 0);
+            mynt::YImg8 yimg(mat_img.rows, mat_img.cols);
+            memcpy(yimg.data(), mat_img.data, yimg.size().area());
+            imgs[j].image = yimg;
             if (imgs[j].image.empty()) {
                 std::cerr << "ERROR: img is empty !!!" << std::endl;
                 continue;

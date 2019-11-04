@@ -12,14 +12,19 @@
 #include <algorithm>
 #include <set>
 
-#include <opencv2/calib3d.hpp>
-#include <opencv2/video.hpp>
+//#include <opencv2/calib3d.hpp>
+//#include <opencv2/video.hpp>
+
+#include <opencv2/core.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 
 #include "maths/math_basics.h"
 #include "kinematics/convertor.h"
 #include "kinematics/transform.h"
 #include "cv/undistort.h"
 #include "cv/calib3d.h"
+#include "cv/image_filtering.h"
 #include "cv/visual_tracking.h"
 
 namespace mynt {
@@ -136,8 +141,8 @@ namespace mynt {
         cam0_curr_img_ptr->time_stamp = cam0_img.time_stamp;
         cam1_curr_img_ptr->time_stamp = cam1_img.time_stamp;
 
-        cam0_curr_img_ptr->image = cam0_img.image.clone();
-        cam1_curr_img_ptr->image = cam1_img.image.clone();
+        cam0_curr_img_ptr->image = cam0_img.image;
+        cam1_curr_img_ptr->image = cam1_img.image;
 
         // Build the image pyramids once since they're used at multiple places
         createImagePyramids();
@@ -188,8 +193,8 @@ namespace mynt {
     }
 
     void ImageProcessor::createImagePyramids() {
-        const cv::Mat &curr_cam0_img = cam0_curr_img_ptr->image;
-        const cv::Mat &curr_cam1_img = cam1_curr_img_ptr->image;
+        const mynt::YImg8 &curr_cam0_img = cam0_curr_img_ptr->image;
+        const mynt::YImg8 &curr_cam1_img = cam1_curr_img_ptr->image;
 
 //        cv::buildOpticalFlowPyramid(
 //                curr_cam0_img, curr_cam0_pyramid_,
@@ -205,38 +210,27 @@ namespace mynt {
 
         curr_cam0_pyramid_.clear();
         curr_cam1_pyramid_.clear();
-        cv::Mat tmp1, tmp2;
-#if 1
+        mynt::YImg8 tmp1, tmp2;
         for (int i = 0; i < 4; i++) { // the downsampling step of the Gaussian pyramid construction
             if(i == 0) {
                 curr_cam0_pyramid_.push_back(curr_cam0_img);
                 curr_cam1_pyramid_.push_back(curr_cam1_img);
                 continue;
             }
-            cv::Mat img1_last = curr_cam0_pyramid_[i-1];
-            cv::pyrDown(img1_last, tmp1, img1_last.size() / 2);
+            mynt::YImg8 img1_last = curr_cam0_pyramid_[i-1];
+            mynt::pyr_down(img1_last, tmp1);
             curr_cam0_pyramid_.push_back(tmp1);
-            cv::Mat img2_last = curr_cam1_pyramid_[i-1];
-            cv::pyrDown(img2_last, tmp2, img2_last.size() / 2);
+            mynt::YImg8 img2_last = curr_cam1_pyramid_[i-1];
+            mynt::pyr_down(img2_last, tmp2);
             curr_cam1_pyramid_.push_back(tmp2);
         }
-#else
-        double scale = 1.0;
-        for (int i = 0; i < 4; i++) {
-            cv::resize(curr_cam0_img, tmp1, cv::Size(curr_cam0_img.cols * scale, curr_cam0_img.rows * scale));
-            curr_cam0_pyramid_.push_back(tmp1);
-            cv::resize(curr_cam1_img, tmp2, cv::Size(curr_cam1_img.cols * scale, curr_cam1_img.rows * scale));
-            curr_cam1_pyramid_.push_back(tmp2);
-            scale *= 0.5;
-        }
-#endif
     }
 
     void ImageProcessor::initializeFirstFrame() {
         // Size of each grid.
-        const cv::Mat &img = cam0_curr_img_ptr->image;
-        static int grid_height = img.rows / processor_config.grid_row;
-        static int grid_width  = img.cols / processor_config.grid_col;
+        const mynt::YImg8 &img = cam0_curr_img_ptr->image;
+        static int grid_height = img.rows() / processor_config.grid_row;
+        static int grid_width  = img.cols() / processor_config.grid_col;
 
         // Detect new features on the frist image.
 //        std::vector<cv::KeyPoint> new_features(0);
@@ -339,8 +333,8 @@ namespace mynt {
 
     void ImageProcessor::trackFeatures() {
         // Size of each grid.
-        static int grid_height = cam0_curr_img_ptr->image.rows / processor_config.grid_row;
-        static int grid_width  = cam0_curr_img_ptr->image.cols / processor_config.grid_col;
+        static int grid_height = cam0_curr_img_ptr->image.rows() / processor_config.grid_row;
+        static int grid_width  = cam0_curr_img_ptr->image.cols() / processor_config.grid_col;
 
         // Compute a rough relative rotation which takes a vector from the previous frame to the current frame.
         mynt::RotationMatrix cam0_R_p_c;
@@ -405,9 +399,9 @@ namespace mynt {
             if (track_inliers[i] == 0)
                 continue;
             if (curr_cam0_points[i].y < 0 ||
-                curr_cam0_points[i].y > cam0_curr_img_ptr->image.rows - 1 ||
+                curr_cam0_points[i].y > cam0_curr_img_ptr->image.rows() - 1 ||
                 curr_cam0_points[i].x < 0 ||
-                curr_cam0_points[i].x > cam0_curr_img_ptr->image.cols - 1)
+                curr_cam0_points[i].x > cam0_curr_img_ptr->image.cols() - 1)
                 track_inliers[i] = 0;
         }
 
@@ -564,9 +558,9 @@ namespace mynt {
             if (inlier_markers[i] == 0)
                 continue;
             if (cam1_points[i].y < 0 ||
-                cam1_points[i].y > cam1_curr_img_ptr->image.rows - 1 ||
+                cam1_points[i].y > cam1_curr_img_ptr->image.rows() - 1 ||
                 cam1_points[i].x < 0 ||
-                cam1_points[i].x > cam1_curr_img_ptr->image.cols - 1)
+                cam1_points[i].x > cam1_curr_img_ptr->image.cols()- 1)
                 inlier_markers[i] = 0;
         }
 
@@ -608,14 +602,14 @@ namespace mynt {
     }
 
     void ImageProcessor::addNewFeatures() {
-        const cv::Mat &curr_img = cam0_curr_img_ptr->image;
+        const mynt::YImg8 &curr_img = cam0_curr_img_ptr->image;
 
         // Size of each grid.
-        static int grid_height = cam0_curr_img_ptr->image.rows / processor_config.grid_row;
-        static int grid_width  = cam0_curr_img_ptr->image.cols / processor_config.grid_col;
+        static int grid_height = cam0_curr_img_ptr->image.rows() / processor_config.grid_row;
+        static int grid_width  = cam0_curr_img_ptr->image.cols() / processor_config.grid_col;
 
         // Create a mask to avoid redetecting existing features.
-        cv::Mat mask(curr_img.rows, curr_img.cols, CV_8U, cv::Scalar(1));
+//        cv::Mat mask(curr_img.rows, curr_img.cols, CV_8U, cv::Scalar(1));
 
         for (const auto &features : *curr_features_ptr) {
             for (const auto &feature : features.second) {
@@ -1183,31 +1177,35 @@ namespace mynt {
             cv::Scalar tracked(0, 255, 0);
             cv::Scalar new_feature(0, 0, 255);
 
-            static int grid_height = cam0_curr_img_ptr->image.rows / processor_config.grid_row;
-            static int grid_width  = cam0_curr_img_ptr->image.cols / processor_config.grid_col;
+            static int grid_height = cam0_curr_img_ptr->image.rows() / processor_config.grid_row;
+            static int grid_width  = cam0_curr_img_ptr->image.cols() / processor_config.grid_col;
 
             // Create an output image.
-            int img_height = cam0_curr_img_ptr->image.rows;
-            int img_width = cam0_curr_img_ptr->image.cols;
+            int img_height = cam0_curr_img_ptr->image.rows();
+            int img_width = cam0_curr_img_ptr->image.cols();
+            cv::Mat mat_01(img_height, img_width, CV_8UC1);
+            mempcpy(mat_01.data, cam0_curr_img_ptr->image.data(), sizeof(unsigned char) * cam0_curr_img_ptr->image.size().area());
+            cv::Mat mat_02(img_height, img_width, CV_8UC1);
+            mempcpy(mat_02.data, cam1_curr_img_ptr->image.data(), sizeof(unsigned char) * cam1_curr_img_ptr->image.size().area());
             cv::Mat out_img(img_height, img_width * 2, CV_8UC3);
-            cvtColor(cam0_curr_img_ptr->image, out_img.colRange(0, img_width), CV_GRAY2RGB);
-            cvtColor(cam1_curr_img_ptr->image, out_img.colRange(img_width, img_width * 2), CV_GRAY2RGB);
+            cv::cvtColor(mat_01, out_img.colRange(0, img_width), CV_GRAY2RGB);
+            cv::cvtColor(mat_02, out_img.colRange(img_width, img_width * 2), CV_GRAY2RGB);
 
             // Draw grids on the image.
             for (int i = 1; i < processor_config.grid_row; ++i) {
                 cv::Point pt1(0, i * grid_height);
                 cv::Point pt2(img_width * 2, i * grid_height);
-                line(out_img, pt1, pt2, cv::Scalar(255, 0, 0));
+                cv::line(out_img, pt1, pt2, cv::Scalar(255, 0, 0));
             }
             for (int i = 1; i < processor_config.grid_col; ++i) {
                 cv::Point pt1(i * grid_width, 0);
                 cv::Point pt2(i * grid_width, img_height);
-                line(out_img, pt1, pt2, cv::Scalar(255, 0, 0));
+                cv::line(out_img, pt1, pt2, cv::Scalar(255, 0, 0));
             }
             for (int i = 1; i < processor_config.grid_col; ++i) {
                 cv::Point pt1(i * grid_width + img_width, 0);
                 cv::Point pt2(i * grid_width + img_width, img_height);
-                line(out_img, pt1, pt2, cv::Scalar(255, 0, 0));
+                cv::line(out_img, pt1, pt2, cv::Scalar(255, 0, 0));
             }
 
             // Collect features ids in the previous frame.

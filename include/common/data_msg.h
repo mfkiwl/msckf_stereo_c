@@ -8,15 +8,16 @@
 #include <boost/shared_ptr.hpp>
 
 //#include <Eigen/Core>
-#include <opencv2/core.hpp>
+//#include <opencv2/core.hpp>
 
 #include "maths/vector.h"
+#include "cv/yimg.h"
 
 namespace mynt {
 
     struct Image {
         double time_stamp;
-        cv::Mat image;
+        mynt::YImg8 image;
     };
     typedef boost::shared_ptr<Image> ImagePtr;
     typedef boost::shared_ptr<const Image> ImageConstPtr;
