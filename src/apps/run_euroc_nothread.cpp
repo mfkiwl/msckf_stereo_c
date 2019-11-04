@@ -156,10 +156,19 @@ int main() {
             glLineWidth(2);
             glBegin(GL_LINES);
             // std::vector<Eigen::Vector3d> path_to_draw = path_to_draw_;
-            int nPath_size = system_ptr->path_to_draw_.size();
-            for (int i = 0; i < nPath_size - 1; ++i) {
+            int size_path = system_ptr->path_to_draw_.size();
+            for (int i = 0; i < size_path - 1; ++i) {
                 glVertex3f(system_ptr->path_to_draw_[i][0], system_ptr->path_to_draw_[i][1], system_ptr->path_to_draw_[i][2]);
                 glVertex3f(system_ptr->path_to_draw_[i + 1][0], system_ptr->path_to_draw_[i + 1][1], system_ptr->path_to_draw_[i + 1][2]);
+            }
+            glEnd();
+
+            glColor3f(0, 0, 255);
+            glPointSize(1.f);
+            glBegin(GL_POINTS);
+            int size_points = system_ptr->points3d_to_draw_.size();
+            for (int i = 0; i < size_points; ++i) {
+                glVertex3f(system_ptr->points3d_to_draw_[i].x, system_ptr->points3d_to_draw_[i].y, system_ptr->points3d_to_draw_[i].z);
             }
             glEnd();
 

@@ -50,6 +50,7 @@ namespace mynt {
     void System::backend_callback() {
         msckfvio_ptr_->featureCallback(feature_msg_ptr_);
         path_to_draw_ = msckfvio_ptr_->get_path();
+        points3d_to_draw_ = msckfvio_ptr_->get_points3d();
     }
 }
 

@@ -26,6 +26,8 @@ namespace mynt {
 
         std::vector<mynt::Vector3> path_to_draw_;
 
+        std::vector<mynt::Point3f> points3d_to_draw_;
+
         typedef boost::shared_ptr<System> Ptr;
         typedef boost::shared_ptr<const System> ConstPtr;
 

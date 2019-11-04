@@ -1284,20 +1284,14 @@ namespace mynt {
             for (int j = 0; j < 3; ++j)
                 covariance_twist[i * 6 + j] = P_body_vel(i, j);
 
-        // TODO
-//        // Publish the 3D positions of the features that
-//        // has been initialized.
-//        pcl::PointCloud<pcl::PointXYZ>::Ptr feature_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
-//        feature_msg_ptr->height = 1;
-//        for (const auto &item : map_server) {
-//            const auto &feature = item.second;
-//            if (feature.is_initialized) {
-//                Vector3d feature_position = IMUState::T_imu_body.linear() * feature.position;
-//                feature_msg_ptr->points.push_back(pcl::PointXYZ(feature_position(0), feature_position(1), feature_position(2)));
-//            }
-//        }
-//        feature_msg_ptr->width = feature_msg_ptr->points.size();
-//        feature_pub.publish(feature_msg_ptr);
+        // Publish the 3D positions of the features that has been initialized.
+        for (const auto &item : map_server) {
+            const auto &feature = item.second;
+            if (feature.is_initialized) {
+                mynt::Vector3 feature_position = IMUState::T_imu_body.rotation_matrix() * feature.position;
+                points3d_.push_back(mynt::Point3f(feature_position[0], feature_position[1], feature_position[2]));
+            }
+        }
 
         return;
     }

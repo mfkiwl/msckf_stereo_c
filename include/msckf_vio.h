@@ -77,6 +77,8 @@ class MsckfVio {
 
     std::vector<mynt::Vector3> get_path() {return path_;}
 
+    std::vector<mynt::Point3f> get_points3d() {return points3d_;}
+
     typedef boost::shared_ptr<MsckfVio> Ptr;
     typedef boost::shared_ptr<const MsckfVio> ConstPtr;
 
@@ -142,6 +144,7 @@ class MsckfVio {
     YAML::Node cfg_cam_imu_;
 
     std::vector<mynt::Vector3> path_;
+    std::vector<mynt::Point3f> points3d_;
 
     // Chi squared test table.
     static std::map<int, double> chi_squared_test_table;
