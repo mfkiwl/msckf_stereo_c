@@ -23,10 +23,10 @@ endif()
 add_subdirectory(msckf_core)
 include_directories(msckf_core/include msckf_core/mynt_basic_algthms/include)
 
-include_directories(include)
+include_directories(include ./)
 
-add_executable(run_euroc apps/run_euroc.cpp)
-target_link_libraries(run_euroc pthread msckf_core)
+add_executable(run_euroc_muitl_threads apps/run_euroc_muitl_threads.cpp)
+target_link_libraries(run_euroc_muitl_threads pthread msckf_core)
 
-add_executable(run_euroc_nothread apps/run_euroc_nothread.cpp)
-target_link_libraries(run_euroc_nothread pthread msckf_core)
+add_executable(run_euroc_single_thread apps/run_euroc_single_thread.cpp glwindow/glwindow_x11.cpp glwindow/scenewindow.cpp)
+target_link_libraries(run_euroc_single_thread pthread msckf_core)

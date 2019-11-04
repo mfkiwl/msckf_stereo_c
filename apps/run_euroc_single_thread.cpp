@@ -8,14 +8,17 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 
-#define VIEW_WINDOW 1
+#define ONLY_GL 0
 
-#if VIEW_WINDOW
+#if ONLY_GL
+#else
 #include <pangolin/pangolin.h>
 using namespace pangolin;
 #endif
 
 #include "system.h"
+
+#include "glwindow/scenewindow.hpp"
 
 mynt::SystemPtr system_ptr;
 
@@ -29,9 +32,10 @@ int main() {
 
     system_ptr.reset(new mynt::System(file_cam_imu));
 
-#if VIEW_WINDOW
-    // init viewer
-    // create pangolin window and plot the trajectory
+#if ONLY_GL
+    glwindow::SceneWindow scene(640, 480, "Trajectory Viewer GL");
+#else
+    // init viewer, create pangolin window and plot the trajectory
     pangolin::CreateWindowAndBind("Trajectory Viewer", 640, 480);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
@@ -48,7 +52,7 @@ int main() {
 #endif
 
     // image data
-    std::vector<std::vector<std::pair<double,std::string>>> data_img(num_cams);
+    std::vector<std::vector<std::pair<double, std::string>>> data_img(num_cams);
     for (int n = 0; n < num_cams; ++n) {
         std::ifstream cam_file(euroc_dir + "/cam" + std::to_string(n) + "/data.csv");
         if (!cam_file.good()) {
@@ -65,14 +69,14 @@ int main() {
             std::string seconds = s.substr(0, s.size() - 9);
             double stamp_ns = std::stoi(seconds) * 1e9 + std::stoi(nanoseconds);
             std::getline(stream, s, ',');
-            std::string imgname = s.substr(0, s.size()-1);
+            std::string imgname = s.substr(0, s.size() - 1);
             data_img[n].push_back(std::make_pair(stamp_ns, imgname));
         }
         cam_file.close();
     }
-    timestamp_first = data_img[0][0].first*1e-9; // to seconds;
+    timestamp_first = data_img[0][0].first * 1e-9; // to seconds;
 
-    if(num_cams == 2)
+    if (num_cams == 2)
         assert(data_img[0].size() == data_img[1].size());
 
     // imu data
@@ -86,10 +90,10 @@ int main() {
 
     unsigned int imgs_size = data_img[0].size();
     int idx_img = 0;
-    while(idx_img < imgs_size) {
+    while (idx_img < imgs_size) {
         mynt::Image imgs[num_cams];
-        for(int j=0; j<num_cams; ++j) {
-            imgs[j].time_stamp = data_img[j][idx_img].first*1e-9; // to seconds;
+        for (int j = 0; j < num_cams; ++j) {
+            imgs[j].time_stamp = data_img[j][idx_img].first * 1e-9; // to seconds;
             std::string img_path = euroc_dir + "/cam" + std::to_string(j) + "/data/" + data_img[j][idx_img].second;
             cv::Mat mat_img = cv::imread(img_path, 0);
             mynt::YImg8 yimg(mat_img.rows, mat_img.cols);
@@ -127,7 +131,7 @@ int main() {
             // std::cout << "imu: " << gyr.transpose() << ", " << acc.transpose() << std::endl;
 
             boost::shared_ptr<mynt::Imu> imu(new mynt::Imu);
-            imu->time_stamp = stamp_ns*1e-9; // to seconds
+            imu->time_stamp = stamp_ns * 1e-9; // to seconds
             imu->angular_velocity = gyr;
             imu->linear_acceleration = acc;
 
@@ -135,52 +139,86 @@ int main() {
 
             t_imu = imu->time_stamp;
 
-        } while(t_imu <= t_img);
+        } while (t_imu <= t_img);
 
         system_ptr->stereo_callback(imgs[0], imgs[1]);
 
         system_ptr->backend_callback();
 
-#if VIEW_WINDOW
-        // view
-        {
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+#if ONLY_GL
+        if (scene.win.alive()) {
+            if (scene.start_draw()) {
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            d_cam.Activate(s_cam);
-            glClearColor(0.75f, 0.75f, 0.75f, 0.75f);
-            glColor3f(0, 0, 1);
-            pangolin::glDrawAxis(3);
+                glClearColor(0.75f, 0.75f, 0.75f, 0.75f);
+                glColor3f(0, 0, 1);
 
-            // draw poses
-            glColor3f(0, 0, 0);
-            glLineWidth(2);
-            glBegin(GL_LINES);
-            // std::vector<Eigen::Vector3d> path_to_draw = path_to_draw_;
-            int size_path = system_ptr->path_to_draw_.size();
-            for (int i = 0; i < size_path - 1; ++i) {
-                glVertex3f(system_ptr->path_to_draw_[i][0], system_ptr->path_to_draw_[i][1], system_ptr->path_to_draw_[i][2]);
-                glVertex3f(system_ptr->path_to_draw_[i + 1][0], system_ptr->path_to_draw_[i + 1][1], system_ptr->path_to_draw_[i + 1][2]);
+                glColor3f(255, 0, 0);
+                glLineWidth(2);
+                glBegin(GL_LINES);
+                int size_path = system_ptr->path_to_draw_.size();
+                for (int i = 0; i < size_path - 1; ++i) {
+                    glVertex3f(system_ptr->path_to_draw_[i][0], system_ptr->path_to_draw_[i][1],
+                               system_ptr->path_to_draw_[i][2]);
+                    glVertex3f(system_ptr->path_to_draw_[i + 1][0], system_ptr->path_to_draw_[i + 1][1],
+                               system_ptr->path_to_draw_[i + 1][2]);
+                }
+                glEnd();
+
+                glColor3f(0, 0, 255);
+                glPointSize(1.f);
+                glBegin(GL_POINTS);
+                int size_points = system_ptr->points3d_to_draw_.size();
+                for (int i = 0; i < size_points; ++i) {
+                    glVertex3f(system_ptr->points3d_to_draw_[i].x, system_ptr->points3d_to_draw_[i].y,
+                               system_ptr->points3d_to_draw_[i].z);
+                }
+                glEnd();
+
+                scene.finish_draw();
             }
-            glEnd();
-
-            glColor3f(0, 0, 255);
-            glPointSize(1.f);
-            glBegin(GL_POINTS);
-            int size_points = system_ptr->points3d_to_draw_.size();
-            for (int i = 0; i < size_points; ++i) {
-                glVertex3f(system_ptr->points3d_to_draw_[i].x, system_ptr->points3d_to_draw_[i].y, system_ptr->points3d_to_draw_[i].z);
-            }
-            glEnd();
-
-            pangolin::FinishFrame();
         }
+#else
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        d_cam.Activate(s_cam);
+        glClearColor(0.75f, 0.75f, 0.75f, 0.75f);
+        glColor3f(0, 0, 1);
+        pangolin::glDrawAxis(3);
+
+        // draw poses
+        glColor3f(0, 0, 0);
+        glLineWidth(2);
+        glBegin(GL_LINES);
+        // std::vector<Eigen::Vector3d> path_to_draw = path_to_draw_;
+        int size_path = system_ptr->path_to_draw_.size();
+        for (int i = 0; i < size_path - 1; ++i) {
+            glVertex3f(system_ptr->path_to_draw_[i][0], system_ptr->path_to_draw_[i][1],
+                       system_ptr->path_to_draw_[i][2]);
+            glVertex3f(system_ptr->path_to_draw_[i + 1][0], system_ptr->path_to_draw_[i + 1][1],
+                       system_ptr->path_to_draw_[i + 1][2]);
+        }
+        glEnd();
+
+        glColor3f(0, 0, 255);
+        glPointSize(1.f);
+        glBegin(GL_POINTS);
+        int size_points = system_ptr->points3d_to_draw_.size();
+        for (int i = 0; i < size_points; ++i) {
+            glVertex3f(system_ptr->points3d_to_draw_[i].x, system_ptr->points3d_to_draw_[i].y,
+                       system_ptr->points3d_to_draw_[i].z);
+        }
+        glEnd();
+
+        pangolin::FinishFrame();
 #endif
         idx_img++;
     }
 
     imu_file.close();
 
-#if VIEW_WINDOW
+#if ONLY_GL
+#else
     pangolin::QuitAll();
 #endif
 

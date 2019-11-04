@@ -64,8 +64,7 @@ link_libraries(mynt_kinematics mynt_cv)
 
 include_directories(include)
 
-add_library(msckf_core src/image_processor.cpp src/msckf_vio.cpp src/system.cpp)
-#target_link_libraries(msckf_core pthread)
+add_library(msckf_core SHARED src/image_processor.cpp src/msckf_vio.cpp src/system.cpp)
 
 # unit test
 if(BUILD_TEST)
