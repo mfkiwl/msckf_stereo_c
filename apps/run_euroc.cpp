@@ -11,8 +11,6 @@
 
 #include "maths/vector.h"
 
-//#include <Eigen/Core>
-
 #include <pangolin/pangolin.h>
 using namespace pangolin;
 
