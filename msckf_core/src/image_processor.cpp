@@ -389,7 +389,7 @@ namespace mynt {
 //                             processor_config.track_precision),
 //                cv::OPTFLOW_USE_INITIAL_FLOW);
 
-        mynt::OpticalFlowMultiLevel(prev_cam0_pyramid_, curr_cam0_pyramid_, prev_cam0_points, curr_cam0_points, track_inliers, 15, 30);
+        mynt::optical_flow_multi_level(prev_cam0_pyramid_, curr_cam0_pyramid_, prev_cam0_points, curr_cam0_points, track_inliers, 15, 30);
 
 //        for(int i=0; i<cv_curr_cam0_points.size(); ++i)
 //            curr_cam0_points[i] = mynt::Point2f(cv_curr_cam0_points[i].x, cv_curr_cam0_points[i].y);
@@ -548,7 +548,7 @@ namespace mynt {
 //                                          processor_config.track_precision),
 //                             cv::OPTFLOW_USE_INITIAL_FLOW);
 
-        mynt::OpticalFlowMultiLevel(curr_cam0_pyramid_, curr_cam1_pyramid_, cam0_points, cam1_points, inlier_markers, 15, 30);
+        mynt::optical_flow_multi_level(curr_cam0_pyramid_, curr_cam1_pyramid_, cam0_points, cam1_points, inlier_markers, 15, 30);
 
 //        for(int i=0; i<cv_cam1_points.size(); ++i)
 //            cam1_points[i] = mynt::Point2f(cv_cam1_points[i].x, cv_cam1_points[i].y);
