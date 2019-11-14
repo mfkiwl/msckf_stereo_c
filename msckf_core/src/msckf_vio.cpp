@@ -22,6 +22,8 @@
 #include <Eigen/SparseCore>
 #include <Eigen/SPQRSupport>
 
+#include <opencv2/core/core.hpp>
+
 #include "kinematics/convertor.h"
 
 namespace mynt {
@@ -721,18 +723,30 @@ namespace mynt {
 
         // TODO: verify
 
-        Eigen::MatrixXd eH_fj(H_fj.rows(), H_fj.cols());
+//        Eigen::MatrixXd eH_fj(H_fj.rows(), H_fj.cols());
+//        for(int i=0; i<H_fj.rows(); ++i)
+//            for(int j=0; j<H_fj.cols(); ++j)
+//                eH_fj(i, j) = H_fj(i, j);
+//
+//        Eigen::JacobiSVD<Eigen::MatrixXd> svd_helper(eH_fj, Eigen::ComputeFullU | Eigen::ComputeThinV);
+//        Eigen::MatrixXd eA = svd_helper.matrixU().rightCols(jacobian_row_size - 3);
+//
+//        mynt::Matrix A(eA.rows(), eA.cols());
+//        for(int i=0; i<eA.rows(); ++i)
+//            for(int j=0; j<eA.cols(); ++j)
+//                A(i, j) = eA(i, j);
+
+        cv::Mat cvH(H_fj.rows(), H_fj.cols(), CV_32F);
         for(int i=0; i<H_fj.rows(); ++i)
             for(int j=0; j<H_fj.cols(); ++j)
-                eH_fj(i, j) = H_fj(i, j);
-
-        Eigen::JacobiSVD<Eigen::MatrixXd> svd_helper(eH_fj, Eigen::ComputeFullU | Eigen::ComputeThinV);
-        Eigen::MatrixXd eA = svd_helper.matrixU().rightCols(jacobian_row_size - 3);
-
-        mynt::Matrix A(eA.rows(), eA.cols());
-        for(int i=0; i<eA.rows(); ++i)
-            for(int j=0; j<eA.cols(); ++j)
-                A(i, j) = eA(i, j);
+                cvH.at<float>(i, j) = H_fj(i, j);
+        cv::Mat cvS, cvU, cvVt;
+        cv::SVD::compute(cvH, cvS, cvU, cvVt, cv::SVD::FULL_UV); // cv::SVD::FULL_UV
+        int j_start = cvU.cols-(jacobian_row_size-3);
+        mynt::Matrix A(cvU.rows, jacobian_row_size - 3);
+        for(int i=0; i<cvU.rows; ++i)
+            for(int j=j_start; j<cvU.cols; ++j)
+                A(i, j-j_start) = cvU.at<float>(i, j);
 
 //        mynt::Matrix U, W, V;
 //        H_fj.svd(U, W, V);
@@ -741,11 +755,11 @@ namespace mynt {
         H_x = A.transpose() * H_xj;
         r   = A.transpose() * r_j;
 
-        if(n_pub == 9) {
-            debug_ << "featureJacobian U:\n" << svd_helper.matrixU() << std::endl;
-            debug_ << "featureJacobian H_x:\n" << H_x << std::endl;
-            debug_ << "featureJacobian r:\n"   << r << std::endl;
-        }
+//        if(n_pub == 9) {
+//            debug_ << "featureJacobian U:\n" << svd_helper.matrixU() << std::endl;
+//            debug_ << "featureJacobian H_x:\n" << H_x << std::endl;
+//            debug_ << "featureJacobian r:\n"   << r << std::endl;
+//        }
 
         return;
     }
