@@ -1234,27 +1234,11 @@ namespace mynt {
         T_i_w.set_translation(imu_state.position);
 
         mynt::EuclideanTransform T_b_w = IMUState::T_imu_body * T_i_w * IMUState::T_imu_body.inv();
-//        mynt::Vector3 body_velocity = IMUState::T_imu_body.rotation_matrix() * imu_state.velocity;
 
-//        // Publish tf
-//        bool publish_tf = false;
-//        if (publish_tf) {
-//            tf::Transform T_b_w_tf;
-//            tf::transformEigenToTF(T_b_w, T_b_w_tf);
-//            tf_pub.sendTransform(tf::StampedTransform(
-//                    T_b_w_tf, time, fixed_frame_id, child_frame_id));
-//        }
-
-        // Publish the odometry: T_b_w, body_velocity
+        // Publish the odometry: T_b_w
         mynt::RotationMatrix m3_r = T_b_w.rotation_matrix();
         mynt::Vector3 v3_t = T_b_w.translation();
-//        mynt::Quarternion q4_r = m3_r.quarternion();
-
-        Eigen::Matrix3d e_m3_r;
-        for(int i=0; i<3; ++i)
-            for(int j=0; j<3; ++j)
-                e_m3_r(i, j) = m3_r(i, j);
-        Eigen::Quaterniond q4_r(e_m3_r);
+        mynt::Quarternion q4_r = m3_r.quarternion_hamilton(); // Hamilton for draw
 
         path_.push_back(v3_t);
 
