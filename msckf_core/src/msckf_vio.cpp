@@ -17,14 +17,15 @@
 #include <boost/math/distributions/chi_squared.hpp>
 
 #include <Eigen/Dense>
-#include <Eigen/SVD>
+//#include <Eigen/SVD>
 #include <Eigen/QR>
 #include <Eigen/SparseCore>
 #include <Eigen/SPQRSupport>
 
-#include <opencv2/core/core.hpp>
+//#include <opencv2/core/core.hpp>
 
 #include "kinematics/convertor.h"
+#include "maths/svd_fulluv.h"
 
 namespace mynt {
     // Static member variables in IMUState class.
@@ -723,6 +724,7 @@ namespace mynt {
 
         // TODO: verify
 
+        /// Eigen
 //        Eigen::MatrixXd eH_fj(H_fj.rows(), H_fj.cols());
 //        for(int i=0; i<H_fj.rows(); ++i)
 //            for(int j=0; j<H_fj.cols(); ++j)
@@ -736,22 +738,28 @@ namespace mynt {
 //            for(int j=0; j<eA.cols(); ++j)
 //                A(i, j) = eA(i, j);
 
-        cv::Mat cvH(H_fj.rows(), H_fj.cols(), CV_32F);
-        for(int i=0; i<H_fj.rows(); ++i)
-            for(int j=0; j<H_fj.cols(); ++j)
-                cvH.at<float>(i, j) = H_fj(i, j);
-        cv::Mat cvS, cvU, cvVt;
-        cv::SVD::compute(cvH, cvS, cvU, cvVt, cv::SVD::FULL_UV); // cv::SVD::FULL_UV
-        int j_start = cvU.cols-(jacobian_row_size-3);
-        mynt::Matrix A(cvU.rows, jacobian_row_size - 3);
-        for(int i=0; i<cvU.rows; ++i)
-            for(int j=j_start; j<cvU.cols; ++j)
-                A(i, j-j_start) = cvU.at<float>(i, j);
+        /// OpenCV
+//        cv::Mat cvH(H_fj.rows(), H_fj.cols(), CV_32F);
+//        for(int i=0; i<H_fj.rows(); ++i)
+//            for(int j=0; j<H_fj.cols(); ++j)
+//                cvH.at<float>(i, j) = H_fj(i, j);
+//        cv::Mat cvS, cvU, cvVt;
+//        cv::SVD::compute(cvH, cvS, cvU, cvVt, cv::SVD::FULL_UV); // cv::SVD::FULL_UV
+//        int j_start = cvU.cols-(jacobian_row_size-3);
+//        mynt::Matrix A(cvU.rows, jacobian_row_size - 3);
+//        for(int i=0; i<cvU.rows; ++i)
+//            for(int j=j_start; j<cvU.cols; ++j)
+//                A(i, j-j_start) = cvU.at<float>(i, j);
 
-//        mynt::Matrix U, W, V;
-//        H_fj.svd(U, W, V);
-//
-//        mynt::Matrix A1 = U.get_mat(0, U.cols()-(jacobian_row_size - 3), U.rows()-1, U.cols()-1);
+        /// Shen according OpenCV
+        mynt::Matrix U1, W1, Vt1;
+        mynt::svd_fulluv(H_fj, W1, U1, Vt1);
+        int j_start = U1.cols()-(jacobian_row_size-3);
+        mynt::Matrix A(U1.rows(), jacobian_row_size - 3);
+        for(int i=0; i<U1.rows(); ++i)
+            for(int j=j_start; j<U1.cols(); ++j)
+                A(i, j-j_start) = U1(i, j);
+
         H_x = A.transpose() * H_xj;
         r   = A.transpose() * r_j;
 

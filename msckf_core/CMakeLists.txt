@@ -64,12 +64,6 @@ link_libraries(mynt_kinematics mynt_cv)
 
 include_directories(include)
 
-find_package(OpenCV REQUIRED COMPONENTS core) # features2d calib3d video
-if(OpenCV_FOUND)
-    include_directories(${OpenCV_INCLUDE_DIRS})
-    link_libraries(${OpenCV_LIBS})
-endif()
-
 add_library(msckf_core SHARED src/image_processor.cpp src/msckf_vio.cpp src/system.cpp)
 
 # unit test
