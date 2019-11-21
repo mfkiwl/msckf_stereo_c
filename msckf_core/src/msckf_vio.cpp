@@ -14,7 +14,7 @@
 #include <algorithm>
 #include <chrono>
 
-#include <boost/math/distributions/chi_squared.hpp>
+//#include <boost/math/distributions/chi_squared.hpp>
 
 #include <Eigen/Dense>
 //#include <Eigen/SVD>
@@ -26,6 +26,7 @@
 
 #include "kinematics/convertor.h"
 #include "maths/svd_fulluv.h"
+#include "maths/math_basics.h"
 
 namespace mynt {
     // Static member variables in IMUState class.
@@ -165,6 +166,10 @@ namespace mynt {
             return false;
         std::cout << "Finish loading parameters..." << std::endl;
 
+        pose_outfile_.open("pose_out.txt");
+
+        debug_.open("debug_msckfvio.txt");
+
         // Initialize state server
         state_server.continuous_noise_cov = mynt::Matrix(12, 12);
         state_server.continuous_noise_cov.set_mat(0, 0, mynt::Matrix::eye(3) * IMUState::gyro_noise);
@@ -174,13 +179,10 @@ namespace mynt {
 
         // Initialize the chi squared test table with confidence level 0.95.
         for (int i = 1; i < 100; ++i) {
-            boost::math::chi_squared chi_squared_dist(i);
-            chi_squared_test_table[i] = boost::math::quantile(chi_squared_dist, 0.05);
+//            boost::math::chi_squared chi_squared_dist(i);
+//            chi_squared_test_table[i] = boost::math::quantile(chi_squared_dist, 0.05);
+            chi_squared_test_table[i] = mynt::chi_square_table_p95[i-1];
         }
-
-        pose_outfile_.open("pose_out.txt");
-
-        debug_.open("debug_msckfvio.txt");
 
         return true;
     }
