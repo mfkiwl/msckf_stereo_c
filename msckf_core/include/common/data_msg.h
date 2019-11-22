@@ -7,9 +7,6 @@
 
 #include <boost/shared_ptr.hpp>
 
-//#include <Eigen/Core>
-//#include <opencv2/core.hpp>
-
 #include "maths/vector.h"
 #include "cv/yimg.h"
 

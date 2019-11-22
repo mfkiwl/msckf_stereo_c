@@ -18,7 +18,7 @@ namespace mynt {
         System(std::string file_cam_imu);
         ~System();
 
-        void stereo_callback(const mynt::Image &cam0_img, const mynt::Image &cam1_img);
+        void stereo_callback(const mynt::Image &cam0_img, const mynt::Image &cam1_img, bool is_draw = false);
 
         void imu_callback(const mynt::ImuConstPtr &msg);
 
@@ -28,6 +28,8 @@ namespace mynt {
 
         std::vector<mynt::Point3f> points3d_to_draw_;
 
+        mynt::ImageProcessorPtr imgproc_ptr_;
+
         typedef boost::shared_ptr<System> Ptr;
         typedef boost::shared_ptr<const System> ConstPtr;
 
@@ -36,7 +38,6 @@ namespace mynt {
 
         boost::shared_ptr<CameraMeasurement> feature_msg_ptr_;
 
-        mynt::ImageProcessorPtr imgproc_ptr_;
         mynt::MsckfVioPtr msckfvio_ptr_;
     };
 

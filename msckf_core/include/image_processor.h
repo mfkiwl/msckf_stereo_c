@@ -12,11 +12,6 @@
 #include <map>
 #include <fstream>
 
-//#include <opencv2/core.hpp>
-//#include <opencv2/highgui.hpp>
-//#include <opencv2/imgproc.hpp>
-//#include <opencv2/features2d.hpp>
-
 #include "common/data_msg.h"
 #include "common/config_io.h"
 #include "maths/vector.h"
@@ -26,10 +21,9 @@
 
 namespace mynt {
 
-/*
- * @brief ImageProcessor Detects and tracks features
- *    in image sequences.
- */
+    /**
+     * @brief ImageProcessor Detects and tracks features in image sequences.
+     */
     class ImageProcessor {
     public:
         // Constructor
@@ -46,15 +40,15 @@ namespace mynt {
         // Initialize the object.
         bool initialize();
 
-        /*
+        /**
         * @brief stereoCallback
         *    Callback function for the stereo images.
         * @param cam0_img left image.
         * @param cam1_img right image.
         */
-        void stereoCallback(const mynt::Image &cam0_img, const mynt::Image &cam1_img);
+        void stereoCallback(const mynt::Image &cam0_img, const mynt::Image &cam1_img, bool is_draw = false);
 
-        /*
+        /**
          * @brief imuCallback
          *    Callback function for the imu message.
          * @param msg IMU msg.
@@ -63,12 +57,18 @@ namespace mynt {
 
         boost::shared_ptr<CameraMeasurement> feature_msg_ptr_;
 
-        typedef boost::shared_ptr<ImageProcessor> Ptr;
-        typedef boost::shared_ptr<const ImageProcessor> ConstPtr;
+        /**
+         * @brief FeatureIDType An alias for unsigned long long int.
+         */
+        typedef unsigned long long int FeatureIDType;
 
-    private:
+        std::vector<FeatureIDType> prev_ids_;
+        std::map<FeatureIDType, mynt::Point2f> prev_cam0_points_;
+        std::map<FeatureIDType, mynt::Point2f> prev_cam1_points_;
+        std::map<FeatureIDType, mynt::Point2f> curr_cam0_points_;
+        std::map<FeatureIDType, mynt::Point2f> curr_cam1_points_;
 
-        /*
+        /**
          * @brief ProcessorConfig Configuration parameters for
          *    feature detection and tracking.
          */
@@ -87,11 +87,12 @@ namespace mynt {
             double stereo_threshold;
         };
 
-        /*
-         * @brief FeatureIDType An alias for unsigned long long int.
-         */
-        typedef unsigned long long int FeatureIDType;
+        ProcessorConfig processor_config;
 
+        typedef boost::shared_ptr<ImageProcessor> Ptr;
+        typedef boost::shared_ptr<const ImageProcessor> ConstPtr;
+
+    private:
         /*
          * @brief FeatureMetaData Contains necessary information
          *    of a feature for easy access.
@@ -153,12 +154,6 @@ namespace mynt {
          */
         bool loadParameters();
 
-//        /*
-//         * @brief createRosIO
-//         *    Create ros publisher and subscirbers.
-//         */
-//        bool createRosIO();
-
         /*
          * @initializeFirstFrame
          *    Initialize the image processing sequence, which is
@@ -194,20 +189,6 @@ namespace mynt {
          *    both the tracked and newly detected ones.
          */
         void publish();
-
-        /*
-         * @brief drawFeaturesMono
-         *    Draw tracked and newly detected features on the left
-         *    image only.
-         */
-        void drawFeaturesMono();
-
-        /*
-         * @brief drawFeaturesStereo
-         *    Draw tracked and newly detected features on the
-         *    stereo images.
-         */
-        void drawFeaturesStereo();
 
         /*
          * @brief createImagePyramids
@@ -333,7 +314,6 @@ namespace mynt {
         FeatureIDType next_feature_id;
 
         // Feature detector
-        ProcessorConfig processor_config;
 //        cv::Ptr<cv::Feature2D> detector_ptr;
         CornerDetector detector_;
 

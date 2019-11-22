@@ -37,8 +37,8 @@ namespace mynt {
 //        msckfvio_ptr_->resetCallback();
     }
 
-    void System::stereo_callback(const mynt::Image &cam0_img, const mynt::Image &cam1_img) {
-        imgproc_ptr_->stereoCallback(cam0_img, cam1_img);
+    void System::stereo_callback(const mynt::Image &cam0_img, const mynt::Image &cam1_img, bool is_draw) {
+        imgproc_ptr_->stereoCallback(cam0_img, cam1_img, is_draw);
         feature_msg_ptr_ = imgproc_ptr_->feature_msg_ptr_;
     }
 

@@ -2,8 +2,6 @@ cmake_minimum_required(VERSION 2.8)
 
 project(msckf_core)
 
-option(BUILD_TEST "build unit test" OFF)
-
 set(CMAKE_BUILD_TYPE "Release")
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_FLAGS "-O3 -g")
@@ -59,19 +57,8 @@ endif()
 #add_dependencies(${MYNT_BASIC_ALGTHMS_LIBRARIES} mynt_basic_algthms_external)
 
 add_subdirectory(mynt_basic_algthms)
-include_directories(mynt_basic_algthms/include)
-link_libraries(mynt_kinematics mynt_cv)
 
-include_directories(include)
+include_directories(include mynt_basic_algthms/include)
 
 add_library(msckf_core SHARED src/image_processor.cpp src/msckf_vio.cpp src/system.cpp)
-
-# unit test
-if(BUILD_TEST)
-    enable_testing()
-    find_package(GTest)
-    if(GTest_FOUND)
-        include_directories(${GTEST_INCLUDE_DIRS})
-        add_subdirectory(test)
-    endif()
-endif()
+target_link_libraries(msckf_core mynt_cv)

@@ -15,9 +15,9 @@
 //#include <opencv2/calib3d.hpp>
 //#include <opencv2/video.hpp>
 
-#include <opencv2/core.hpp>
-#include <opencv2/highgui.hpp>
-#include <opencv2/imgproc.hpp>
+//#include <opencv2/core.hpp>
+//#include <opencv2/highgui.hpp>
+//#include <opencv2/imgproc.hpp>
 
 #include "maths/math_basics.h"
 #include "kinematics/convertor.h"
@@ -136,7 +136,7 @@ namespace mynt {
         return true;
     }
 
-    void ImageProcessor::stereoCallback(const mynt::Image &cam0_img, const mynt::Image &cam1_img) {
+    void ImageProcessor::stereoCallback(const mynt::Image &cam0_img, const mynt::Image &cam1_img, bool is_draw) {
         // Get the current image.
         cam0_curr_img_ptr->time_stamp = cam0_img.time_stamp;
         cam1_curr_img_ptr->time_stamp = cam1_img.time_stamp;
@@ -150,10 +150,7 @@ namespace mynt {
         // Detect features in the first frame.
         if (is_first_img) {
             initializeFirstFrame();
-
             is_first_img = false;
-            // Draw results.
-            drawFeaturesStereo();
         } else {
             // Track the feature in the previous image.
             trackFeatures();
@@ -161,8 +158,29 @@ namespace mynt {
             addNewFeatures();
             // Add new features into the current image.
             pruneGridFeatures();
-            // Draw results.
-            drawFeaturesStereo();
+        }
+
+        if(is_draw) {
+            // Collect features ids in the previous frame.
+            prev_ids_.clear();
+            for (const auto &grid_features : *prev_features_ptr)
+                for (const auto &feature : grid_features.second)
+                    prev_ids_.push_back(feature.id);
+            // Collect feature points in the previous and current frame.
+            prev_cam0_points_.erase(prev_cam0_points_.begin(), prev_cam0_points_.end());
+            prev_cam1_points_.erase(prev_cam1_points_.begin(), prev_cam1_points_.end());
+            curr_cam0_points_.erase(curr_cam0_points_.begin(), curr_cam0_points_.end());
+            curr_cam1_points_.erase(curr_cam1_points_.begin(), curr_cam1_points_.end());
+            for (const auto &grid_features : *prev_features_ptr)
+                for (const auto &feature : grid_features.second) {
+                    prev_cam0_points_[feature.id] = feature.cam0_point;
+                    prev_cam1_points_[feature.id] = feature.cam1_point;
+                }
+            for (const auto &grid_features : *curr_features_ptr)
+                for (const auto &feature : grid_features.second) {
+                    curr_cam0_points_[feature.id] = feature.cam0_point;
+                    curr_cam1_points_[feature.id] = feature.cam1_point;
+                }
         }
 
         //updateFeatureLifetime();
@@ -1136,9 +1154,6 @@ namespace mynt {
         undistortPoints(curr_cam0_points, cam0_intrinsics, cam0_distortion_model, cam0_distortion_coeffs, curr_cam0_points_undistorted);
         undistortPoints(curr_cam1_points, cam1_intrinsics, cam1_distortion_model, cam1_distortion_coeffs, curr_cam1_points_undistorted);
 
-//        debug_ << std::fixed << std::setprecision(9) << feature_msg_ptr_->time_stamp
-//               << " ================================= " << curr_ids.size() << std::endl;
-
         for (int i = 0; i < curr_ids.size(); ++i) {
             feature_msg_ptr_->features.push_back(FeatureMeasurement());
             feature_msg_ptr_->features[i].id = curr_ids[i];
@@ -1146,12 +1161,7 @@ namespace mynt {
             feature_msg_ptr_->features[i].v0 = curr_cam0_points_undistorted[i].y;
             feature_msg_ptr_->features[i].u1 = curr_cam1_points_undistorted[i].x;
             feature_msg_ptr_->features[i].v1 = curr_cam1_points_undistorted[i].y;
-
-//            FeatureMeasurement fm = feature_msg_ptr_->features[i];
-//            debug_ << std::fixed << std::setprecision(5) << fm.u0 << ", " << fm.v0 << ", " << fm.u1 << ", " << fm.v1 << std::endl;
         }
-
-//        debug_ << std::endl;
 
         // Publish tracking info.
         boost::shared_ptr<TrackingInfo> tracking_info_msg_ptr(new TrackingInfo());
@@ -1167,106 +1177,6 @@ namespace mynt {
                << tracking_info_msg_ptr->after_tracking << ", "
                << tracking_info_msg_ptr->after_matching << ", "
                << tracking_info_msg_ptr->after_ransac << std::endl;
-
-        return;
-    }
-
-    void ImageProcessor::drawFeaturesStereo() {
-        if (true) {
-            // Colors for different features.
-            cv::Scalar tracked(0, 255, 0);
-            cv::Scalar new_feature(0, 0, 255);
-
-            static int grid_height = cam0_curr_img_ptr->image.rows() / processor_config.grid_row;
-            static int grid_width  = cam0_curr_img_ptr->image.cols() / processor_config.grid_col;
-
-            // Create an output image.
-            int img_height = cam0_curr_img_ptr->image.rows();
-            int img_width = cam0_curr_img_ptr->image.cols();
-            cv::Mat mat_01(img_height, img_width, CV_8UC1);
-            mempcpy(mat_01.data, cam0_curr_img_ptr->image.data(), sizeof(unsigned char) * cam0_curr_img_ptr->image.size().area());
-            cv::Mat mat_02(img_height, img_width, CV_8UC1);
-            mempcpy(mat_02.data, cam1_curr_img_ptr->image.data(), sizeof(unsigned char) * cam1_curr_img_ptr->image.size().area());
-            cv::Mat out_img(img_height, img_width * 2, CV_8UC3);
-            cv::cvtColor(mat_01, out_img.colRange(0, img_width), CV_GRAY2RGB);
-            cv::cvtColor(mat_02, out_img.colRange(img_width, img_width * 2), CV_GRAY2RGB);
-
-            // Draw grids on the image.
-            for (int i = 1; i < processor_config.grid_row; ++i) {
-                cv::Point pt1(0, i * grid_height);
-                cv::Point pt2(img_width * 2, i * grid_height);
-                cv::line(out_img, pt1, pt2, cv::Scalar(255, 0, 0));
-            }
-            for (int i = 1; i < processor_config.grid_col; ++i) {
-                cv::Point pt1(i * grid_width, 0);
-                cv::Point pt2(i * grid_width, img_height);
-                cv::line(out_img, pt1, pt2, cv::Scalar(255, 0, 0));
-            }
-            for (int i = 1; i < processor_config.grid_col; ++i) {
-                cv::Point pt1(i * grid_width + img_width, 0);
-                cv::Point pt2(i * grid_width + img_width, img_height);
-                cv::line(out_img, pt1, pt2, cv::Scalar(255, 0, 0));
-            }
-
-            // Collect features ids in the previous frame.
-            std::vector<FeatureIDType> prev_ids(0);
-            for (const auto &grid_features : *prev_features_ptr)
-                for (const auto &feature : grid_features.second)
-                    prev_ids.push_back(feature.id);
-
-            // Collect feature points in the previous frame.
-            std::map<FeatureIDType, cv::Point2f> prev_cam0_points;
-            std::map<FeatureIDType, cv::Point2f> prev_cam1_points;
-            for (const auto &grid_features : *prev_features_ptr)
-                for (const auto &feature : grid_features.second) {
-                    prev_cam0_points[feature.id] = cv::Point2f(feature.cam0_point.x, feature.cam0_point.y);
-                    prev_cam1_points[feature.id] = cv::Point2f(feature.cam1_point.x, feature.cam1_point.y);
-                }
-
-            // Collect feature points in the current frame.
-            std::map<FeatureIDType, cv::Point2f> curr_cam0_points;
-            std::map<FeatureIDType, cv::Point2f> curr_cam1_points;
-            for (const auto &grid_features : *curr_features_ptr)
-                for (const auto &feature : grid_features.second) {
-                    curr_cam0_points[feature.id] = cv::Point2f(feature.cam0_point.x, feature.cam0_point.y);
-                    curr_cam1_points[feature.id] = cv::Point2f(feature.cam1_point.x, feature.cam1_point.y);
-                }
-
-            // Draw tracked features.
-            for (const auto &id : prev_ids) {
-                if (prev_cam0_points.find(id) != prev_cam0_points.end() &&
-                    curr_cam0_points.find(id) != curr_cam0_points.end()) {
-                    cv::Point2f prev_pt0 = prev_cam0_points[id];
-                    cv::Point2f prev_pt1 = prev_cam1_points[id] + cv::Point2f(img_width, 0.0);
-                    cv::Point2f curr_pt0 = curr_cam0_points[id];
-                    cv::Point2f curr_pt1 = curr_cam1_points[id] + cv::Point2f(img_width, 0.0);
-
-                    cv::circle(out_img, curr_pt0, 3, tracked, -1);
-                    cv::circle(out_img, curr_pt1, 3, tracked, -1);
-                    cv::line(out_img, prev_pt0, curr_pt0, tracked, 1);
-                    cv::line(out_img, prev_pt1, curr_pt1, tracked, 1);
-
-                    prev_cam0_points.erase(id);
-                    prev_cam1_points.erase(id);
-                    curr_cam0_points.erase(id);
-                    curr_cam1_points.erase(id);
-                }
-            }
-
-            // Draw new features.
-            for (const auto &new_cam0_point : curr_cam0_points) {
-                cv::Point2f pt0 = new_cam0_point.second;
-                cv::Point2f pt1 = curr_cam1_points[new_cam0_point.first] + cv::Point2f(img_width, 0.0);
-
-                cv::circle(out_img, pt0, 3, new_feature, -1);
-                cv::circle(out_img, pt1, 3, new_feature, -1);
-            }
-
-            cv::resize(out_img, out_img, cv::Size(out_img.cols*0.5, out_img.rows*0.5));
-            cv::namedWindow("Feature");
-            cv::imshow("Feature", out_img);
-            cv::waitKey(5);
-        }
 
         return;
     }
