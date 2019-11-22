@@ -79,8 +79,8 @@ class MsckfVio {
 
     std::vector<mynt::Point3f> get_points3d() {return points3d_;}
 
-    typedef boost::shared_ptr<MsckfVio> Ptr;
-    typedef boost::shared_ptr<const MsckfVio> ConstPtr;
+    typedef std::shared_ptr<MsckfVio> Ptr;
+    typedef std::shared_ptr<const MsckfVio> ConstPtr;
 
   private:
     /*

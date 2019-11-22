@@ -1164,7 +1164,7 @@ namespace mynt {
         }
 
         // Publish tracking info.
-        boost::shared_ptr<TrackingInfo> tracking_info_msg_ptr(new TrackingInfo());
+        std::shared_ptr<TrackingInfo> tracking_info_msg_ptr(new TrackingInfo());
         tracking_info_msg_ptr->time_stamp = cam0_curr_img_ptr->time_stamp;
         tracking_info_msg_ptr->before_tracking = before_tracking;
         tracking_info_msg_ptr->after_tracking = after_tracking;

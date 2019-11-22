@@ -221,7 +221,7 @@ int main() {
             }
             // std::cout << "imu: " << gyr.transpose() << ", " << acc.transpose() << std::endl;
 
-            boost::shared_ptr<mynt::Imu> imu(new mynt::Imu);
+            std::shared_ptr<mynt::Imu> imu(new mynt::Imu);
             imu->time_stamp = stamp_ns * 1e-9; // to seconds
             imu->angular_velocity = gyr;
             imu->linear_acceleration = acc;

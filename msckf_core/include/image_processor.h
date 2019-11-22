@@ -55,7 +55,7 @@ namespace mynt {
          */
         void imuCallback(const mynt::ImuConstPtr &msg);
 
-        boost::shared_ptr<CameraMeasurement> feature_msg_ptr_;
+        std::shared_ptr<CameraMeasurement> feature_msg_ptr_;
 
         /**
          * @brief FeatureIDType An alias for unsigned long long int.
@@ -89,8 +89,8 @@ namespace mynt {
 
         ProcessorConfig processor_config;
 
-        typedef boost::shared_ptr<ImageProcessor> Ptr;
-        typedef boost::shared_ptr<const ImageProcessor> ConstPtr;
+        typedef std::shared_ptr<ImageProcessor> Ptr;
+        typedef std::shared_ptr<const ImageProcessor> ConstPtr;
 
     private:
         /*
@@ -337,9 +337,9 @@ namespace mynt {
         mynt::Vector3 t_cam1_imu;
 
         // Previous and current images
-        boost::shared_ptr<mynt::Image> cam0_prev_img_ptr;
-        boost::shared_ptr<mynt::Image> cam0_curr_img_ptr;
-        boost::shared_ptr<mynt::Image> cam1_curr_img_ptr;
+        std::shared_ptr<mynt::Image> cam0_prev_img_ptr;
+        std::shared_ptr<mynt::Image> cam0_curr_img_ptr;
+        std::shared_ptr<mynt::Image> cam1_curr_img_ptr;
 
         // Pyramids for previous and current image
         std::vector<mynt::YImg8> prev_cam0_pyramid_;
@@ -347,8 +347,8 @@ namespace mynt {
         std::vector<mynt::YImg8> curr_cam1_pyramid_;
 
         // Features in the previous and current image.
-        boost::shared_ptr<GridFeatures> prev_features_ptr;
-        boost::shared_ptr<GridFeatures> curr_features_ptr;
+        std::shared_ptr<GridFeatures> prev_features_ptr;
+        std::shared_ptr<GridFeatures> curr_features_ptr;
 
         // Number of features after each outlier removal step.
         int before_tracking = 0;

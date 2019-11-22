@@ -30,13 +30,13 @@ namespace mynt {
 
         mynt::ImageProcessorPtr imgproc_ptr_;
 
-        typedef boost::shared_ptr<System> Ptr;
-        typedef boost::shared_ptr<const System> ConstPtr;
+        typedef std::shared_ptr<System> Ptr;
+        typedef std::shared_ptr<const System> ConstPtr;
 
     private:
         YAML::Node cfg_cam_imu_;
 
-        boost::shared_ptr<CameraMeasurement> feature_msg_ptr_;
+        std::shared_ptr<CameraMeasurement> feature_msg_ptr_;
 
         mynt::MsckfVioPtr msckfvio_ptr_;
     };
