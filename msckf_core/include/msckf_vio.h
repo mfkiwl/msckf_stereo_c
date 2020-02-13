@@ -14,8 +14,8 @@
 #include <string>
 #include <fstream>
 
-#include <Eigen/Dense>
-#include <Eigen/Geometry>
+//#include <Eigen/Dense>
+//#include <Eigen/Geometry>
 
 #include "common/data_msg.h"
 #include "common/config_io.h"
@@ -44,6 +44,7 @@ class MsckfVio {
     // Destructor
     ~MsckfVio() {
         pose_outfile_.close();
+        debug_.close();
     }
 
     /*
@@ -74,10 +75,12 @@ class MsckfVio {
      */
     void featureCallback(const CameraMeasurementConstPtr& msg);
 
-    std::vector<Eigen::Vector3d> get_path() {return path_;}
+    std::vector<mynt::Vector3> get_path() {return path_;}
 
-    typedef boost::shared_ptr<MsckfVio> Ptr;
-    typedef boost::shared_ptr<const MsckfVio> ConstPtr;
+    std::vector<mynt::Point3f> get_points3d() {return points3d_;}
+
+    typedef std::shared_ptr<MsckfVio> Ptr;
+    typedef std::shared_ptr<const MsckfVio> ConstPtr;
 
   private:
     /*
@@ -90,8 +93,9 @@ class MsckfVio {
       CamStateServer cam_states;
 
       // State covariance matrix
-      Eigen::MatrixXd state_cov;
-      Eigen::Matrix<double, 12, 12> continuous_noise_cov;
+      mynt::Matrix state_cov;
+      mynt::Matrix continuous_noise_cov;
+      StateServer() : continuous_noise_cov(mynt::Matrix(12,12)) {}
     };
 
     /*
@@ -99,12 +103,6 @@ class MsckfVio {
      *    Load parameters from the parameter server.
      */
     bool loadParameters();
-
-//    /*
-//     * @brief createRosIO
-//     *    Create ros publisher and subscirbers.
-//     */
-//    bool createRosIO();
 
     /*
      * @brief publish Publish the results of VIO.
@@ -122,26 +120,21 @@ class MsckfVio {
     // Filter related functions
     // Propogate the state
     void batchImuProcessing(const double& time_bound);
-    void processModel(const double& time, const Eigen::Vector3d& m_gyro, const Eigen::Vector3d& m_acc);
-    void predictNewState(const double& dt, const Eigen::Vector3d& gyro, const Eigen::Vector3d& acc);
+    void processModel(const double& time, const mynt::Vector3& m_gyro, const mynt::Vector3& m_acc);
+    void predictNewState(const double& dt, const mynt::Vector3& gyro, const mynt::Vector3& acc);
 
     // Measurement update
     void stateAugmentation(const double& time);
     void addFeatureObservations(const CameraMeasurementConstPtr& msg);
     // This function is used to compute the measurement Jacobian
     // for a single feature observed at a single camera frame.
-    void measurementJacobian(const StateIDType& cam_state_id,
-        const FeatureIDType& feature_id,
-        Eigen::Matrix<double, 4, 6>& H_x,
-        Eigen::Matrix<double, 4, 3>& H_f,
-        Eigen::Vector4d& r);
+    // H_x 4x6, H_f 4x3
+    void measurementJacobian(const StateIDType& cam_state_id, const FeatureIDType& feature_id, mynt::Matrix& H_x, mynt::Matrix& H_f, mynt::Vector4& r);
     // This function computes the Jacobian of all measurements viewed
     // in the given camera states of this feature.
-    void featureJacobian(const FeatureIDType& feature_id,
-        const std::vector<StateIDType>& cam_state_ids,
-        Eigen::MatrixXd& H_x, Eigen::VectorXd& r);
-    void measurementUpdate(const Eigen::MatrixXd& H, const Eigen::VectorXd& r);
-    bool gatingTest(const Eigen::MatrixXd& H, const Eigen::VectorXd&r, const int& dof);
+    void featureJacobian(const FeatureIDType& feature_id, const std::vector<StateIDType>& cam_state_ids, mynt::Matrix &H_x, mynt::VectorX &r);
+    void measurementUpdate(const mynt::Matrix &H, const mynt::VectorX &r);
+    bool gatingTest(const mynt::Matrix& H, const mynt::VectorX&r, const int& dof);
     void removeLostFeatures();
     void findRedundantCamStates(std::vector<StateIDType>& rm_cam_state_ids);
     void pruneCamStateBuffer();
@@ -150,7 +143,8 @@ class MsckfVio {
 
     YAML::Node cfg_cam_imu_;
 
-    std::vector<Eigen::Vector3d> path_;
+    std::vector<mynt::Vector3> path_;
+    std::vector<mynt::Point3f> points3d_;
 
     // Chi squared test table.
     static std::map<int, double> chi_squared_test_table;
@@ -190,35 +184,15 @@ class MsckfVio {
     double rotation_threshold;
     double tracking_rate_threshold;
 
-//    // Subscribers and publishers
-//    ros::Subscriber imu_sub;
-//    ros::Subscriber feature_sub;
-//    ros::Publisher odom_pub;
-//    ros::Publisher feature_pub;
-//    tf::TransformBroadcaster tf_pub;
-//    ros::ServiceServer reset_srv;
-
-//    // Frame id
-//    std::string fixed_frame_id;
-//    std::string child_frame_id;
-
-//    // Whether to publish tf or not.
-//    bool publish_tf;
-
     // Framte rate of the stereo images. This variable is
     // only used to determine the timing threshold of
     // each iteration of the filter.
     double frame_rate;
 
-    // TODO
-    // Debugging variables and functions
-    // void mocapOdomCallback(const nav_msgs::OdometryConstPtr& msg);
-
-//    ros::Subscriber mocap_odom_sub;
-//    ros::Publisher mocap_odom_pub;
-//    Eigen::Isometry3d mocap_initial_frame;
-
     std::ofstream pose_outfile_;
+    std::ofstream debug_;
+
+    int n_pub = 0;
 };
 
 typedef MsckfVio::Ptr MsckfVioPtr;

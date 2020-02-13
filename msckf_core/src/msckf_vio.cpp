@@ -14,18 +14,19 @@
 #include <algorithm>
 #include <chrono>
 
-#include <boost/math/distributions/chi_squared.hpp>
+//#include <boost/math/distributions/chi_squared.hpp>
 
-#include <Eigen/SVD>
+#include <Eigen/Dense>
+//#include <Eigen/SVD>
 #include <Eigen/QR>
 #include <Eigen/SparseCore>
-
 #include <Eigen/SPQRSupport>
 
-#include "math_utils.hpp"
+//#include <opencv2/core/core.hpp>
 
-using namespace std;
-using namespace Eigen;
+#include "kinematics/convertor.h"
+#include "maths/svd_fulluv.h"
+#include "maths/math_basics.h"
 
 namespace mynt {
     // Static member variables in IMUState class.
@@ -34,18 +35,18 @@ namespace mynt {
     double IMUState::acc_noise = 0.01;
     double IMUState::gyro_bias_noise = 0.001;
     double IMUState::acc_bias_noise = 0.01;
-    Vector3d IMUState::gravity = Vector3d(0, 0, -GRAVITY_ACCELERATION);
-    Isometry3d IMUState::T_imu_body = Isometry3d::Identity();
+    mynt::Vector3 IMUState::gravity = mynt::Vector3({0, 0, -GRAVITY_ACCELERATION});
+    mynt::EuclideanTransform IMUState::T_imu_body = mynt::EuclideanTransform();
 
     // Static member variables in CAMState class.
-    Isometry3d CAMState::T_cam0_cam1 = Isometry3d::Identity();
+    mynt::EuclideanTransform CAMState::T_cam0_cam1 = mynt::EuclideanTransform();
 
     // Static member variables in Feature class.
     FeatureIDType Feature::next_id = 0;
     double Feature::observation_noise = 0.01;
     Feature::OptimizationConfig Feature::optimization_config;
 
-    map<int, double> MsckfVio::chi_squared_test_table;
+    std::map<int, double> MsckfVio::chi_squared_test_table;
 
     MsckfVio::MsckfVio(YAML::Node cfg_cam_imu) :
         cfg_cam_imu_(cfg_cam_imu),
@@ -84,7 +85,7 @@ namespace mynt {
         // implicitly. But the initial velocity and bias can be
         // set by parameters.
         // TODO: is it reasonable to set the initial bias to 0?
-        state_server.imu_state.velocity = cfg_msckfvio["initial_state/velocity"].as<Eigen::Vector3d>();
+        state_server.imu_state.velocity = cfg_msckfvio["initial_state/velocity"].as<mynt::Vector3>();
 
         // The initial covariance of orientation and position can be
         // set to 0. But for velocity, bias and extrinsic parameters,
@@ -98,7 +99,7 @@ namespace mynt {
         extrinsic_rotation_cov = cfg_msckfvio["initial_covariance/extrinsic_rotation_cov"].as<double>();
         extrinsic_translation_cov = cfg_msckfvio["initial_covariance/extrinsic_translation_cov"].as<double>();
 
-        state_server.state_cov = MatrixXd::Zero(21, 21);
+        state_server.state_cov = mynt::Matrix(21, 21);
         for (int i = 3; i < 6; ++i)
             state_server.state_cov(i, i) = gyro_bias_cov;
         for (int i = 6; i < 9; ++i)
@@ -111,18 +112,17 @@ namespace mynt {
             state_server.state_cov(i, i) = extrinsic_translation_cov;
 
         // Transformation offsets between the frames involved.
-        Eigen::Matrix4d m4_cam0_imu = cfg_cam_imu_["cam0"]["T_cam_imu"].as<Eigen::Matrix4d>();
-        Isometry3d T_imu_cam0 = matrix4d_to_isometry3d(m4_cam0_imu); // 坐标系变换
+        mynt::Matrix m4_cam0_imu = cfg_cam_imu_["cam0"]["T_cam_imu"].as<mynt::Mat4>();
 
-        Isometry3d T_cam0_imu = T_imu_cam0.inverse();
-        state_server.imu_state.R_imu_cam0 = T_cam0_imu.linear().transpose();
+        mynt::EuclideanTransform T_cam0_imu = m4_cam0_imu.inv();
+        state_server.imu_state.R_imu_cam0 = T_cam0_imu.rotation_matrix().transpose();
         state_server.imu_state.t_cam0_imu = T_cam0_imu.translation();
 
-        Eigen::Matrix4d m4_cam1_cam0 = cfg_cam_imu_["cam1"]["T_cn_cnm1"].as<Eigen::Matrix4d>();
-        CAMState::T_cam0_cam1 = matrix4d_to_isometry3d(m4_cam1_cam0); // 坐标系变换
+        mynt::Matrix m4_cam1_cam0 = cfg_cam_imu_["cam1"]["T_cn_cnm1"].as<mynt::Mat4>();
+        CAMState::T_cam0_cam1 = m4_cam1_cam0; // 坐标系变换
 
-        Eigen::Matrix4d m4_imu_body = cfg_cam_imu_["T_imu_body"].as<Eigen::Matrix4d>();
-        IMUState::T_imu_body = matrix4d_to_isometry3d(m4_imu_body).inverse();
+        mynt::Matrix m4_imu_body = cfg_cam_imu_["T_imu_body"].as<mynt::Mat4>();
+        IMUState::T_imu_body = m4_imu_body.inv();
 
         // Maximum number of camera states to be stored
         max_cam_state_size = cfg_msckfvio["max_cam_state_size"].as<double>();
@@ -140,68 +140,49 @@ namespace mynt {
         printf("acc bias noise: %.10f\n", IMUState::acc_bias_noise);
         printf("observation noise: %.10f\n", Feature::observation_noise);
         printf("initial velocity: %f, %f, %f\n",
-            state_server.imu_state.velocity(0),
-            state_server.imu_state.velocity(1),
-            state_server.imu_state.velocity(2));
+            state_server.imu_state.velocity[0],
+            state_server.imu_state.velocity[1],
+            state_server.imu_state.velocity[2]);
         printf("initial gyro bias cov: %f\n", gyro_bias_cov);
         printf("initial acc bias cov: %f\n", acc_bias_cov);
         printf("initial velocity cov: %f\n", velocity_cov);
         printf("initial extrinsic rotation cov: %f\n", extrinsic_rotation_cov);
         printf("initial extrinsic translation cov: %f\n", extrinsic_translation_cov);
 
-        cout << T_imu_cam0.linear() << endl;
-        cout << T_imu_cam0.translation().transpose() << endl;
-
         printf("max camera state #: %d\n", max_cam_state_size);
 
-        std::cout << "T_imu_cam0:\n" << T_imu_cam0.matrix() << std::endl;
-        std::cout << "T_cam0_cam1:\n" << CAMState::T_cam0_cam1.matrix() << std::endl;
-        std::cout << "T_imu_body:\n" << IMUState::T_imu_body.matrix() << std::endl;
+        std::cout << "state_server.imu_state.R_imu_cam0:\n" << state_server.imu_state.R_imu_cam0 << std::endl;
+        std::cout << "state_server.imu_state.t_cam0_imu:\n" << state_server.imu_state.t_cam0_imu << std::endl;
+        std::cout << "T_cam0_cam1:\n" << CAMState::T_cam0_cam1 << std::endl;
+        std::cout << "T_imu_body:\n" << IMUState::T_imu_body << std::endl;
 
         printf("MsckfVio end ===========================================\n");
 
         return true;
     }
 
-//    bool MsckfVio::createRosIO() {
-//        path_pub = nh.advertise<nav_msgs::Path>("path", 10);
-//        odom_pub = nh.advertise<nav_msgs::Odometry>("odom", 10);
-//        feature_pub = nh.advertise<sensor_msgs::PointCloud2>("feature_point_cloud", 10);
-//
-//        reset_srv = nh.advertiseService("reset", &MsckfVio::resetCallback, this);
-//
-//        imu_sub = nh.subscribe("imu", 100, &MsckfVio::imuCallback, this);
-//        feature_sub = nh.subscribe("features", 40, &MsckfVio::featureCallback, this);
-//
-//        mocap_odom_sub = nh.subscribe("mocap_odom", 10, &MsckfVio::mocapOdomCallback, this);
-//        mocap_odom_pub = nh.advertise<nav_msgs::Odometry>("gt_odom", 1);
-//
-//        return true;
-//    }
-
     bool MsckfVio::initialize() {
         if (!loadParameters())
             return false;
         std::cout << "Finish loading parameters..." << std::endl;
 
+        pose_outfile_.open("pose_out.txt");
+
+        debug_.open("debug_msckfvio.txt");
+
         // Initialize state server
-        state_server.continuous_noise_cov = Matrix<double, 12, 12>::Zero();
-        state_server.continuous_noise_cov.block<3, 3>(0, 0) = Matrix3d::Identity() * IMUState::gyro_noise;
-        state_server.continuous_noise_cov.block<3, 3>(3, 3) = Matrix3d::Identity() * IMUState::gyro_bias_noise;
-        state_server.continuous_noise_cov.block<3, 3>(6, 6) = Matrix3d::Identity() * IMUState::acc_noise;
-        state_server.continuous_noise_cov.block<3, 3>(9, 9) = Matrix3d::Identity() * IMUState::acc_bias_noise;
+        state_server.continuous_noise_cov = mynt::Matrix(12, 12);
+        state_server.continuous_noise_cov.set_mat(0, 0, mynt::Matrix::eye(3) * IMUState::gyro_noise);
+        state_server.continuous_noise_cov.set_mat(3, 3, mynt::Matrix::eye(3) * IMUState::gyro_bias_noise);
+        state_server.continuous_noise_cov.set_mat(6, 6, mynt::Matrix::eye(3) * IMUState::acc_noise);
+        state_server.continuous_noise_cov.set_mat(9, 9, mynt::Matrix::eye(3) * IMUState::acc_bias_noise);
 
         // Initialize the chi squared test table with confidence level 0.95.
         for (int i = 1; i < 100; ++i) {
-            boost::math::chi_squared chi_squared_dist(i);
-            chi_squared_test_table[i] = boost::math::quantile(chi_squared_dist, 0.05);
+//            boost::math::chi_squared chi_squared_dist(i);
+//            chi_squared_test_table[i] = boost::math::quantile(chi_squared_dist, 0.05);
+            chi_squared_test_table[i] = mynt::chi_square_table_p95[i-1];
         }
-
-//        if (!createRosIO())
-//            return false;
-//        ROS_INFO("Finish creating ROS IO...");
-
-        pose_outfile_.open("pose_out.txt");
 
         return true;
     }
@@ -227,37 +208,38 @@ namespace mynt {
 
     void MsckfVio::initializeGravityAndBias() {
         // Initialize gravity and gyro bias.
-        Vector3d sum_angular_vel = Vector3d::Zero();
-        Vector3d sum_linear_acc = Vector3d::Zero();
+        mynt::Vector3 sum_angular_vel;
+        mynt::Vector3 sum_linear_acc;
 
         for (const auto &imu_msg : imu_msg_buffer) {
-            Vector3d angular_vel = imu_msg.angular_velocity;
-            Vector3d linear_acc = imu_msg.linear_acceleration;
+            mynt::Vector3 angular_vel = imu_msg.angular_velocity;
+            mynt::Vector3 linear_acc  = imu_msg.linear_acceleration;
 
             sum_angular_vel += angular_vel;
-            sum_linear_acc += linear_acc;
+            sum_linear_acc  += linear_acc;
         }
 
         state_server.imu_state.gyro_bias = sum_angular_vel / imu_msg_buffer.size();
         //IMUState::gravity =
         //  -sum_linear_acc / imu_msg_buffer.size();
         // This is the gravity in the IMU frame.
-        Vector3d gravity_imu = sum_linear_acc / imu_msg_buffer.size();
+        mynt::Vector3 gravity_imu = sum_linear_acc / imu_msg_buffer.size();
 
         // Initialize the initial orientation, so that the estimation
         // is consistent with the inertial frame.
-        double gravity_norm = gravity_imu.norm();
-        IMUState::gravity = Vector3d(0.0, 0.0, -gravity_norm);
+        double gravity_norm = gravity_imu.l2norm();
+        IMUState::gravity = mynt::Vector3({0.0, 0.0, -gravity_norm});
 
         std::cout << "===g: " << gravity_norm << std::endl;
 
-        Quaterniond q0_i_w = Quaterniond::FromTwoVectors(gravity_imu, -IMUState::gravity);
-        state_server.imu_state.orientation = rotationToQuaternion(q0_i_w.toRotationMatrix().transpose());
+        // TODO: verify
+        state_server.imu_state.orientation = mynt::from_two_vector(gravity_imu, -IMUState::gravity).transpose().quarternion();
+
+        std::cout << "state_server.imu_state.orientation: " << state_server.imu_state.orientation << std::endl;
 
         return;
     }
 
-    // TODO
     bool MsckfVio::resetCallback() {
         std::cout << "Start resetting msckf vio..." << std::endl;
         // Temporarily shutdown the subscribers to prevent the
@@ -268,14 +250,14 @@ namespace mynt {
         // Reset the IMU state.
         IMUState &imu_state = state_server.imu_state;
         imu_state.time = 0.0;
-        imu_state.orientation = Vector4d(0.0, 0.0, 0.0, 1.0);
-        imu_state.position = Vector3d::Zero();
-        imu_state.velocity = Vector3d::Zero();
-        imu_state.gyro_bias = Vector3d::Zero();
-        imu_state.acc_bias = Vector3d::Zero();
-        imu_state.orientation_null = Vector4d(0.0, 0.0, 0.0, 1.0);
-        imu_state.position_null = Vector3d::Zero();
-        imu_state.velocity_null = Vector3d::Zero();
+        imu_state.orientation = mynt::Quarternion();
+        imu_state.position = mynt::Vector3();
+        imu_state.velocity = mynt::Vector3();
+        imu_state.gyro_bias = mynt::Vector3();
+        imu_state.acc_bias = mynt::Vector3();
+        imu_state.orientation_null = mynt::Quarternion();
+        imu_state.position_null = mynt::Vector3();
+        imu_state.velocity_null = mynt::Vector3();
 
         // Remove all existing camera states.
         state_server.cam_states.clear();
@@ -290,7 +272,7 @@ namespace mynt {
         extrinsic_rotation_cov = cfg_msckfvio["initial_covariance/extrinsic_rotation_cov"].as<double>();
         extrinsic_translation_cov = cfg_msckfvio["initial_covariance/extrinsic_translation_cov"].as<double>();
 
-        state_server.state_cov = MatrixXd::Zero(21, 21);
+        state_server.state_cov = mynt::Matrix(21, 21);
         for (int i = 3; i < 6; ++i)
             state_server.state_cov(i, i) = gyro_bias_cov;
         for (int i = 6; i < 9; ++i)
@@ -334,6 +316,8 @@ namespace mynt {
             state_server.imu_state.time = msg->time_stamp;
         }
 
+        std::vector<FeatureMeasurement> features = msg->features;
+
         static double max_processing_time = 0.0;
         static int critical_time_cntr = 0;
         auto processing_start_time = std::chrono::system_clock::now();
@@ -342,38 +326,34 @@ namespace mynt {
         // that are received before the image msg.
         auto start_time = std::chrono::system_clock::now();
         batchImuProcessing(msg->time_stamp);
-        double imu_processing_time =
-                std::chrono::duration<double>(std::chrono::system_clock::now() - start_time).count();
+        double imu_processing_time = std::chrono::duration<double>(std::chrono::system_clock::now() - start_time).count();
 
         // Augment the state vector.
         start_time = std::chrono::system_clock::now();
         stateAugmentation(msg->time_stamp);
-        double state_augmentation_time =
-                std::chrono::duration<double>(std::chrono::system_clock::now() - start_time).count();
+        double state_augmentation_time = std::chrono::duration<double>(std::chrono::system_clock::now() - start_time).count();
 
         // Add new observations for existing features or new
         // features in the map server.
         start_time = std::chrono::system_clock::now();
         addFeatureObservations(msg);
-        double add_observations_time =
-                std::chrono::duration<double>(std::chrono::system_clock::now() - start_time).count();
+        double add_observations_time = std::chrono::duration<double>(std::chrono::system_clock::now() - start_time).count();
 
         // Perform measurement update if necessary.
         start_time = std::chrono::system_clock::now();
         removeLostFeatures();
-        double remove_lost_features_time =
-                std::chrono::duration<double>(std::chrono::system_clock::now() - start_time).count();
+        double remove_lost_features_time = std::chrono::duration<double>(std::chrono::system_clock::now() - start_time).count();
 
         start_time = std::chrono::system_clock::now();
         pruneCamStateBuffer();
-        double prune_cam_states_time =
-                std::chrono::duration<double>(std::chrono::system_clock::now() - start_time).count();
+        double prune_cam_states_time = std::chrono::duration<double>(std::chrono::system_clock::now() - start_time).count();
 
         // Publish the odometry.
         start_time = std::chrono::system_clock::now();
         publish(msg->time_stamp);
-        double publish_time =
-                std::chrono::duration<double>(std::chrono::system_clock::now() - start_time).count();
+        double publish_time = std::chrono::duration<double>(std::chrono::system_clock::now() - start_time).count();
+
+        n_pub++;
 
         // Reset the system if necessary.
         onlineReset();
@@ -383,89 +363,16 @@ namespace mynt {
         if (processing_time > 1.0 / frame_rate) {
             ++critical_time_cntr;
             printf("\033[1;31mTotal processing time %f/%d...\033[0m\n", processing_time, critical_time_cntr);
-            printf("IMU processing time: %f/%f\n",
-                imu_processing_time, imu_processing_time/processing_time);
-            printf("State augmentation time: %f/%f\n",
-                state_augmentation_time, state_augmentation_time/processing_time);
-            printf("Add observations time: %f/%f\n",
-                add_observations_time, add_observations_time/processing_time);
-            printf("Remove lost features time: %f/%f\n",
-                   remove_lost_features_time, remove_lost_features_time / processing_time);
-            printf("Remove camera states time: %f/%f\n",
-                   prune_cam_states_time, prune_cam_states_time / processing_time);
-            printf("Publish time: %f/%f\n",
-                publish_time, publish_time/processing_time);
+            printf("IMU processing time: %f/%f\n", imu_processing_time, imu_processing_time/processing_time);
+            printf("State augmentation time: %f/%f\n", state_augmentation_time, state_augmentation_time/processing_time);
+            printf("Add observations time: %f/%f\n", add_observations_time, add_observations_time/processing_time);
+            printf("Remove lost features time: %f/%f\n", remove_lost_features_time, remove_lost_features_time / processing_time);
+            printf("Remove camera states time: %f/%f\n", prune_cam_states_time, prune_cam_states_time / processing_time);
+            printf("Publish time: %f/%f\n", publish_time, publish_time/processing_time);
         }
 
         return;
     }
-
-// TODO
-//    void MsckfVio::mocapOdomCallback(const nav_msgs::OdometryConstPtr& msg) {
-//      static bool first_mocap_odom_msg = true;
-//
-//      // If this is the first mocap odometry messsage, set
-//      // the initial frame.
-//      if (first_mocap_odom_msg) {
-//        Quaterniond orientation;
-//        Vector3d translation;
-//        tf::pointMsgToEigen(
-//            msg->pose.pose.position, translation);
-//        tf::quaternionMsgToEigen(
-//            msg->pose.pose.orientation, orientation);
-//        //tf::vectorMsgToEigen(
-//        //    msg->transform.translation, translation);
-//        //tf::quaternionMsgToEigen(
-//        //    msg->transform.rotation, orientation);
-//        mocap_initial_frame.linear() = orientation.toRotationMatrix();
-//        mocap_initial_frame.translation() = translation;
-//        first_mocap_odom_msg = false;
-//      }
-//
-//      // Transform the ground truth.
-//      Quaterniond orientation;
-//      Vector3d translation;
-//      //tf::vectorMsgToEigen(
-//      //    msg->transform.translation, translation);
-//      //tf::quaternionMsgToEigen(
-//      //    msg->transform.rotation, orientation);
-//      tf::pointMsgToEigen(
-//          msg->pose.pose.position, translation);
-//      tf::quaternionMsgToEigen(
-//          msg->pose.pose.orientation, orientation);
-//
-//      Eigen::Isometry3d T_b_v_gt;
-//      T_b_v_gt.linear() = orientation.toRotationMatrix();
-//      T_b_v_gt.translation() = translation;
-//      Eigen::Isometry3d T_b_w_gt = mocap_initial_frame.inverse() * T_b_v_gt;
-//
-//      //Eigen::Vector3d body_velocity_gt;
-//      //tf::vectorMsgToEigen(msg->twist.twist.linear, body_velocity_gt);
-//      //body_velocity_gt = mocap_initial_frame.linear().transpose() *
-//      //  body_velocity_gt;
-//
-//      // Ground truth tf.
-//      if (publish_tf) {
-//        tf::Transform T_b_w_gt_tf;
-//        tf::transformEigenToTF(T_b_w_gt, T_b_w_gt_tf);
-//        tf_pub.sendTransform(tf::StampedTransform(
-//              T_b_w_gt_tf, msg->header.stamp, fixed_frame_id, child_frame_id+"_mocap"));
-//      }
-//
-//      // Ground truth odometry.
-//      nav_msgs::Odometry mocap_odom_msg;
-//      mocap_odom_msg.header.stamp = msg->header.stamp;
-//      mocap_odom_msg.header.frame_id = fixed_frame_id;
-//      mocap_odom_msg.child_frame_id = child_frame_id+"_mocap";
-//
-//      tf::poseEigenToMsg(T_b_w_gt, mocap_odom_msg.pose.pose);
-//      //tf::vectorEigenToMsg(body_velocity_gt,
-//      //    mocap_odom_msg.twist.twist.linear);
-//
-//      mocap_odom_pub.publish(mocap_odom_msg);
-//      return;
-//    }
-
 
     void MsckfVio::batchImuProcessing(const double &time_bound) {
         // Counter how many IMU msgs in the buffer are used.
@@ -481,7 +388,7 @@ namespace mynt {
                 break;
 
             // Convert the msgs.
-            Vector3d m_gyro, m_acc;
+            mynt::Vector3 m_gyro, m_acc;
             m_gyro = imu_msg.angular_velocity;
             m_acc  = imu_msg.linear_acceleration;
 
@@ -499,72 +406,66 @@ namespace mynt {
         return;
     }
 
-    void MsckfVio::processModel(const double &time, const Vector3d &m_gyro, const Vector3d &m_acc) {
+    void MsckfVio::processModel(const double &time, const mynt::Vector3 &m_gyro, const mynt::Vector3 &m_acc) {
         // Remove the bias from the measured gyro and acceleration
         IMUState &imu_state = state_server.imu_state;
-        Vector3d gyro = m_gyro - imu_state.gyro_bias;
-        Vector3d acc = m_acc - imu_state.acc_bias;
+        mynt::Vector3 gyro = m_gyro - imu_state.gyro_bias;
+        mynt::Vector3 acc  = m_acc -  imu_state.acc_bias;
         double dtime = time - imu_state.time;
 
         // Compute discrete transition and noise covariance matrix
-        Matrix<double, 21, 21> F = Matrix<double, 21, 21>::Zero();
-        Matrix<double, 21, 12> G = Matrix<double, 21, 12>::Zero();
+        mynt::Matrix F(21, 21);
+        mynt::Matrix G(21, 12);
 
-        F.block<3, 3>(0, 0) = -skewSymmetric(gyro);
-        F.block<3, 3>(0, 3) = -Matrix3d::Identity();
-        F.block<3, 3>(6, 0) = -quaternionToRotation(imu_state.orientation).transpose() * skewSymmetric(acc);
-        F.block<3, 3>(6, 9) = -quaternionToRotation(imu_state.orientation).transpose();
-        F.block<3, 3>(12, 6) = Matrix3d::Identity();
+        F.set_mat(0,  0, -mynt::skew_symmetric(gyro));
+        F.set_mat(0,  3, -mynt::Matrix::eye(3));
+        F.set_mat(6,  0, -imu_state.orientation.rotation_matrix().transpose() * mynt::skew_symmetric(acc));
+        F.set_mat(6,  9, -imu_state.orientation.rotation_matrix().transpose());
+        F.set_mat(12, 6,  mynt::Matrix::eye(3));
 
-        G.block<3, 3>(0, 0) = -Matrix3d::Identity();
-        G.block<3, 3>(3, 3) = Matrix3d::Identity();
-        G.block<3, 3>(6, 6) = -quaternionToRotation(imu_state.orientation).transpose();
-        G.block<3, 3>(9, 9) = Matrix3d::Identity();
+        G.set_mat(0, 0, -mynt::Matrix::eye(3));
+        G.set_mat(3, 3,  mynt::Matrix::eye(3));
+        G.set_mat(6, 6, -imu_state.orientation.rotation_matrix().transpose());
+        G.set_mat(9, 9,  mynt::Matrix::eye(3));
 
         // Approximate matrix exponential to the 3rd order,
-        // which can be considered to be accurate enough assuming
-        // dtime is within 0.01s.
-        Matrix<double, 21, 21> Fdt = F * dtime;
-        Matrix<double, 21, 21> Fdt_square = Fdt * Fdt;
-        Matrix<double, 21, 21> Fdt_cube = Fdt_square * Fdt;
-        Matrix<double, 21, 21> Phi =
-                Matrix<double, 21, 21>::Identity() + Fdt + 0.5 * Fdt_square + (1.0 / 6.0) * Fdt_cube;
+        // which can be considered to be accurate enough assuming dtime is within 0.01s.
+        mynt::Matrix Fdt = F * dtime;
+        mynt::Matrix Fdt_square = Fdt * Fdt;
+        mynt::Matrix Fdt_cube = Fdt_square * Fdt;
+        mynt::Matrix Phi = mynt::Matrix::eye(21) + Fdt + 0.5 * Fdt_square + (1.0 / 6.0) * Fdt_cube;
 
         // Propogate the state using 4th order Runge-Kutta
         predictNewState(dtime, gyro, acc);
 
         // Modify the transition matrix
-        Matrix3d R_kk_1 = quaternionToRotation(imu_state.orientation_null);
-        Phi.block<3, 3>(0, 0) = quaternionToRotation(imu_state.orientation) * R_kk_1.transpose();
+        mynt::RotationMatrix R_kk_1 = imu_state.orientation_null.rotation_matrix();
+        Phi.set_mat(0, 0, imu_state.orientation.rotation_matrix() * R_kk_1.transpose());
 
-        Vector3d u = R_kk_1 * IMUState::gravity;
-        RowVector3d s = (u.transpose() * u).inverse() * u.transpose();
+        mynt::Vector3 u = R_kk_1 * IMUState::gravity;
+        mynt::Vector3 s = (1.0 / u.dot(u)) * u;
 
-        Matrix3d A1 = Phi.block<3, 3>(6, 0);
-        Vector3d w1 = skewSymmetric(imu_state.velocity_null - imu_state.velocity) * IMUState::gravity;
-        Phi.block<3, 3>(6, 0) = A1 - (A1 * u - w1) * s;
+//        mynt::Matrix A1 = Phi.block<3, 3>(6, 0);
+        mynt::Matrix A1 = Phi.block<3, 3>(6, 0);
+        mynt::Vector3 w1 = mynt::skew_symmetric(imu_state.velocity_null - imu_state.velocity) * IMUState::gravity;
+        Phi.set_mat(6, 0, A1 - (A1 * u - w1) * s.transpose());
 
-        Matrix3d A2 = Phi.block<3, 3>(12, 0);
-        Vector3d w2 = skewSymmetric(
-                dtime * imu_state.velocity_null + imu_state.position_null -
-                imu_state.position) * IMUState::gravity;
-        Phi.block<3, 3>(12, 0) = A2 - (A2 * u - w2) * s;
+        mynt::Matrix A2 = Phi.block<3, 3>(12, 0);
+        mynt::Vector3 w2 = mynt::skew_symmetric(dtime * imu_state.velocity_null + imu_state.position_null - imu_state.position) * IMUState::gravity;
+        Phi.set_mat(12, 0, A2 - (A2 * u - w2) * s.transpose());
 
         // Propogate the state covariance matrix.
-        Matrix<double, 21, 21> Q = Phi * G * state_server.continuous_noise_cov * G.transpose() * Phi.transpose() * dtime;
-        state_server.state_cov.block<21, 21>(0, 0) =
-                Phi * state_server.state_cov.block<21, 21>(0, 0) * Phi.transpose() + Q;
+        mynt::Matrix Q = Phi * G * state_server.continuous_noise_cov * G.transpose() * Phi.transpose() * dtime;
+        state_server.state_cov.set_mat(0, 0, Phi * state_server.state_cov.block<21, 21>(0, 0) * Phi.transpose() + Q);
 
         if (state_server.cam_states.size() > 0) {
-            state_server.state_cov.block(
-                    0, 21, 21, state_server.state_cov.cols() - 21) =
-                    Phi * state_server.state_cov.block(0, 21, 21, state_server.state_cov.cols() - 21);
-            state_server.state_cov.block(
-                    21, 0, state_server.state_cov.rows() - 21, 21) =
-                    state_server.state_cov.block(21, 0, state_server.state_cov.rows() - 21, 21) * Phi.transpose();
+            state_server.state_cov.set_mat(0, 21,
+                    Phi * state_server.state_cov.block(0, 21, 21, state_server.state_cov.cols() - 21));
+            state_server.state_cov.set_mat(21, 0,
+                    state_server.state_cov.block(21, 0, state_server.state_cov.rows() - 21, 21) * Phi.transpose());
         }
 
-        MatrixXd state_cov_fixed = (state_server.state_cov + state_server.state_cov.transpose()) / 2.0;
+        mynt::Matrix state_cov_fixed = (state_server.state_cov + state_server.state_cov.transpose()) * 0.5;
         state_server.state_cov = state_cov_fixed;
 
         // Update the state correspondes to null space.
@@ -578,61 +479,51 @@ namespace mynt {
         return;
     }
 
-    void MsckfVio::predictNewState(const double &dt, const Vector3d &gyro, const Vector3d &acc) {
-        // TODO: Will performing the forward integration using
-        //    the inverse of the quaternion give better accuracy?
-        double gyro_norm = gyro.norm();
-        Matrix4d Omega = Matrix4d::Zero();
-        Omega.block<3, 3>(0, 0) = -skewSymmetric(gyro);
-        Omega.block<3, 1>(0, 3) = gyro;
-        Omega.block<1, 3>(3, 0) = -gyro;
+    void MsckfVio::predictNewState(const double &dt, const mynt::Vector3 &gyro, const mynt::Vector3 &acc) {
+        // TODO: Will performing the forward integration using the inverse of the quaternion give better accuracy?
+        double gyro_norm = gyro.l2norm();
+        mynt::Matrix Omega(4, 4);
+        Omega.set_mat(0, 0, -mynt::skew_symmetric(gyro));
+        Omega.set_mat(0, 3,  gyro);
+        Omega.set_mat(3, 0, -gyro.transpose());
 
-        Vector4d &q = state_server.imu_state.orientation;
-        Vector3d &v = state_server.imu_state.velocity;
-        Vector3d &p = state_server.imu_state.position;
+        mynt::Quarternion &q = state_server.imu_state.orientation;
+        mynt::Vector3 &v = state_server.imu_state.velocity;
+        mynt::Vector3 &p = state_server.imu_state.position;
 
         // Some pre-calculation
-        Vector4d dq_dt, dq_dt2;
+        mynt::Quarternion dq_dt, dq_dt2;
         if (gyro_norm > 1e-5) {
-            dq_dt = (cos(gyro_norm * dt * 0.5) * Matrix4d::Identity() +
-                     1 / gyro_norm * sin(gyro_norm * dt * 0.5) * Omega) * q;
-            dq_dt2 = (cos(gyro_norm * dt * 0.25) * Matrix4d::Identity() +
-                      1 / gyro_norm * sin(gyro_norm * dt * 0.25) * Omega) * q;
+            dq_dt  = mynt::Vector4((cos(gyro_norm * dt * 0.5)  * mynt::Matrix::eye(4) + 1 / gyro_norm * sin(gyro_norm * dt * 0.5)  * Omega) * q.vector4());
+            dq_dt2 = mynt::Vector4((cos(gyro_norm * dt * 0.25) * mynt::Matrix::eye(4) + 1 / gyro_norm * sin(gyro_norm * dt * 0.25) * Omega) * q.vector4());
         } else {
-            dq_dt = (Matrix4d::Identity() + 0.5 * dt * Omega) *
-                    cos(gyro_norm * dt * 0.5) * q;
-            dq_dt2 = (Matrix4d::Identity() + 0.25 * dt * Omega) *
-                     cos(gyro_norm * dt * 0.25) * q;
+            dq_dt  = mynt::Vector4((mynt::Matrix::eye(4) + 0.5  * dt * Omega) * cos(gyro_norm * dt * 0.5)  * q.vector4());
+            dq_dt2 = mynt::Vector4((mynt::Matrix::eye(4) + 0.25 * dt * Omega) * cos(gyro_norm * dt * 0.25) * q.vector4());
         }
-        Matrix3d dR_dt_transpose = quaternionToRotation(dq_dt).transpose();
-        Matrix3d dR_dt2_transpose = quaternionToRotation(dq_dt2).transpose();
+        mynt::RotationMatrix dR_dt_transpose  =  dq_dt.rotation_matrix().transpose();
+        mynt::RotationMatrix dR_dt2_transpose = dq_dt2.rotation_matrix().transpose();
 
         // k1 = f(tn, yn)
-        Vector3d k1_v_dot = quaternionToRotation(q).transpose() * acc +
-                            IMUState::gravity;
-        Vector3d k1_p_dot = v;
+        mynt::Vector3 k1_v_dot = q.rotation_matrix().transpose() * acc + IMUState::gravity;
+        mynt::Vector3 k1_p_dot = v;
 
         // k2 = f(tn+dt/2, yn+k1*dt/2)
-        Vector3d k1_v = v + k1_v_dot * dt / 2;
-        Vector3d k2_v_dot = dR_dt2_transpose * acc +
-                            IMUState::gravity;
-        Vector3d k2_p_dot = k1_v;
+        mynt::Vector3 k1_v = v + k1_v_dot * dt / 2;
+        mynt::Vector3 k2_v_dot = dR_dt2_transpose * acc + IMUState::gravity;
+        mynt::Vector3 k2_p_dot = k1_v;
 
         // k3 = f(tn+dt/2, yn+k2*dt/2)
-        Vector3d k2_v = v + k2_v_dot * dt / 2;
-        Vector3d k3_v_dot = dR_dt2_transpose * acc +
-                            IMUState::gravity;
-        Vector3d k3_p_dot = k2_v;
+        mynt::Vector3 k2_v = v + k2_v_dot * dt / 2;
+        mynt::Vector3 k3_v_dot = dR_dt2_transpose * acc + IMUState::gravity;
+        mynt::Vector3 k3_p_dot = k2_v;
 
         // k4 = f(tn+dt, yn+k3*dt)
-        Vector3d k3_v = v + k3_v_dot * dt;
-        Vector3d k4_v_dot = dR_dt_transpose * acc +
-                            IMUState::gravity;
-        Vector3d k4_p_dot = k3_v;
+        mynt::Vector3 k3_v = v + k3_v_dot * dt;
+        mynt::Vector3 k4_v_dot = dR_dt_transpose * acc + IMUState::gravity;
+        mynt::Vector3 k4_p_dot = k3_v;
 
         // yn+1 = yn + dt/6*(k1+2*k2+2*k3+k4)
-        q = dq_dt;
-        quaternionNormalize(q);
+        q = dq_dt.normalized();
         v = v + dt / 6 * (k1_v_dot + 2 * k2_v_dot + 2 * k3_v_dot + k4_v_dot);
         p = p + dt / 6 * (k1_p_dot + 2 * k2_p_dot + 2 * k3_p_dot + k4_p_dot);
 
@@ -640,62 +531,54 @@ namespace mynt {
     }
 
     void MsckfVio::stateAugmentation(const double &time) {
-
-        const Matrix3d &R_i_c = state_server.imu_state.R_imu_cam0;
-        const Vector3d &t_c_i = state_server.imu_state.t_cam0_imu;
+        const mynt::RotationMatrix &R_i_c = state_server.imu_state.R_imu_cam0;
+        const mynt::Vector3 &t_c_i = state_server.imu_state.t_cam0_imu;
 
         // Add a new camera state to the state server.
-        Matrix3d R_w_i = quaternionToRotation(
-                state_server.imu_state.orientation);
-        Matrix3d R_w_c = R_i_c * R_w_i;
-        Vector3d t_c_w = state_server.imu_state.position +
-                         R_w_i.transpose() * t_c_i;
+        mynt::RotationMatrix R_w_i = state_server.imu_state.orientation.rotation_matrix();
+        mynt::RotationMatrix R_w_c = R_i_c * R_w_i;
+        mynt::Vector3 t_c_w = state_server.imu_state.position + R_w_i.transpose() * t_c_i;
 
-        state_server.cam_states[state_server.imu_state.id] =
-                CAMState(state_server.imu_state.id);
-        CAMState &cam_state = state_server.cam_states[
-                state_server.imu_state.id];
+        state_server.cam_states[state_server.imu_state.id] = CAMState(state_server.imu_state.id);
+        CAMState &cam_state = state_server.cam_states[state_server.imu_state.id];
 
         cam_state.time = time;
-        cam_state.orientation = rotationToQuaternion(R_w_c);
+        cam_state.orientation = R_w_c.quarternion();
         cam_state.position = t_c_w;
 
         cam_state.orientation_null = cam_state.orientation;
-        cam_state.position_null = cam_state.position;
+        cam_state.position_null    = cam_state.position;
 
         // Update the covariance matrix of the state.
         // To simplify computation, the matrix J below is the nontrivial block
         // in Equation (16) in "A Multi-State Constraint Kalman Filter for Vision
         // -aided Inertial Navigation".
-        Matrix<double, 6, 21> J = Matrix<double, 6, 21>::Zero();
-        J.block<3, 3>(0, 0) = R_i_c;
-        J.block<3, 3>(0, 15) = Matrix3d::Identity();
-        J.block<3, 3>(3, 0) = skewSymmetric(R_w_i.transpose() * t_c_i);
+        mynt::Matrix J(6,21);
+        J.set_mat(0, 0, R_i_c);
+        J.set_mat(0, 15, mynt::Matrix::eye(3));
+        J.set_mat(3, 0,  mynt::skew_symmetric(R_w_i.transpose() * t_c_i));
         //J.block<3, 3>(3, 0) = -R_w_i.transpose()*skewSymmetric(t_c_i);
-        J.block<3, 3>(3, 12) = Matrix3d::Identity();
-        J.block<3, 3>(3, 18) = Matrix3d::Identity();
+        J.set_mat(3, 12, mynt::Matrix::eye(3));
+        J.set_mat(3, 18, mynt::Matrix::eye(3));
 
         // Resize the state covariance matrix.
         size_t old_rows = state_server.state_cov.rows();
         size_t old_cols = state_server.state_cov.cols();
-        state_server.state_cov.conservativeResize(old_rows + 6, old_cols + 6);
+        state_server.state_cov.conservative_resize(old_rows + 6, old_cols + 6);
 
         // Rename some matrix blocks for convenience.
-        const Matrix<double, 21, 21> &P11 =
-                state_server.state_cov.block<21, 21>(0, 0);
-        const MatrixXd &P12 =
-                state_server.state_cov.block(0, 21, 21, old_cols - 21);
+        const mynt::Matrix &P11 = state_server.state_cov.block<21, 21>(0, 0);
+        const mynt::Matrix &P12 = state_server.state_cov.block(0, 21, 21, old_cols - 21);
 
         // Fill in the augmented state covariance.
-        state_server.state_cov.block(old_rows, 0, 6, old_cols) << J * P11, J * P12;
-        state_server.state_cov.block(0, old_cols, old_rows, 6) =
-                state_server.state_cov.block(old_rows, 0, 6, old_cols).transpose();
-        state_server.state_cov.block<6, 6>(old_rows, old_cols) =
-                J * P11 * J.transpose();
+//        state_server.state_cov.block(old_rows, 0, 6, old_cols) << J * P11, J * P12;
+        state_server.state_cov.set_mat(old_rows, 0,  J * P11);
+        state_server.state_cov.set_mat(old_rows, 21, J * P12);
+        state_server.state_cov.set_mat(0, old_cols, state_server.state_cov.block(old_rows, 0, 6, old_cols).transpose());
+        state_server.state_cov.set_mat(old_rows, old_cols, J * P11 * J.transpose());
 
         // Fix the covariance to be symmetric
-        MatrixXd state_cov_fixed = (state_server.state_cov +
-                                    state_server.state_cov.transpose()) / 2.0;
+        mynt::Matrix state_cov_fixed = (state_server.state_cov + state_server.state_cov.transpose()) / 2.0;
         state_server.state_cov = state_cov_fixed;
 
         return;
@@ -706,18 +589,15 @@ namespace mynt {
         int curr_feature_num = map_server.size();
         int tracked_feature_num = 0;
 
-        // Add new observations for existing features or new
-        // features in the map server.
+        // Add new observations for existing features or new features in the map server.
         for (const auto &feature : msg->features) {
             if (map_server.find(feature.id) == map_server.end()) {
                 // This is a new feature.
                 map_server[feature.id] = Feature(feature.id);
-                map_server[feature.id].observations[state_id] =
-                        Vector4d(feature.u0, feature.v0, feature.u1, feature.v1);
+                map_server[feature.id].observations[state_id] = mynt::Vector4({feature.u0, feature.v0, feature.u1, feature.v1});
             } else {
                 // This is an old feature.
-                map_server[feature.id].observations[state_id] =
-                        Vector4d(feature.u0, feature.v0, feature.u1, feature.v1);
+                map_server[feature.id].observations[state_id] = mynt::Vector4({feature.u0, feature.v0, feature.u1, feature.v1});
                 ++tracked_feature_num;
             }
         }
@@ -728,91 +608,85 @@ namespace mynt {
     }
 
     void MsckfVio::measurementJacobian(
-            const StateIDType &cam_state_id,
-            const FeatureIDType &feature_id,
-            Matrix<double, 4, 6> &H_x, Matrix<double, 4, 3> &H_f, Vector4d &r) {
+            const StateIDType &cam_state_id, const FeatureIDType &feature_id,
+            mynt::Matrix& H_x, mynt::Matrix& H_f, mynt::Vector4 &r) {
 
         // Prepare all the required data.
         const CAMState &cam_state = state_server.cam_states[cam_state_id];
         const Feature &feature = map_server[feature_id];
 
         // Cam0 pose.
-        Matrix3d R_w_c0 = quaternionToRotation(cam_state.orientation);
-        const Vector3d &t_c0_w = cam_state.position;
+        mynt::RotationMatrix R_w_c0 = cam_state.orientation.rotation_matrix();
+        const mynt::Vector3 &t_c0_w = cam_state.position;
 
         // Cam1 pose.
-        Matrix3d R_c0_c1 = CAMState::T_cam0_cam1.linear();
-        Matrix3d R_w_c1 = CAMState::T_cam0_cam1.linear() * R_w_c0;
-        Vector3d t_c1_w = t_c0_w - R_w_c1.transpose() * CAMState::T_cam0_cam1.translation();
+        mynt::RotationMatrix R_c0_c1 = CAMState::T_cam0_cam1.rotation_matrix();
+        mynt::RotationMatrix R_w_c1  = CAMState::T_cam0_cam1.rotation_matrix() * R_w_c0;
+        mynt::Vector3 t_c1_w = t_c0_w - R_w_c1.transpose() * CAMState::T_cam0_cam1.translation();
 
         // 3d feature position in the world frame.
         // And its observation with the stereo cameras.
-        const Vector3d &p_w = feature.position;
-        const Vector4d &z = feature.observations.find(cam_state_id)->second;
+        const mynt::Vector3 &p_w = feature.position;
+        const mynt::Vector4 &z = feature.observations.find(cam_state_id)->second;
 
         // Convert the feature position from the world frame to
         // the cam0 and cam1 frame.
-        Vector3d p_c0 = R_w_c0 * (p_w - t_c0_w);
-        Vector3d p_c1 = R_w_c1 * (p_w - t_c1_w);
+        mynt::Vector3 p_c0 = R_w_c0 * (p_w - t_c0_w);
+        mynt::Vector3 p_c1 = R_w_c1 * (p_w - t_c1_w);
 
         // Compute the Jacobians.
-        Matrix<double, 4, 3> dz_dpc0 = Matrix<double, 4, 3>::Zero();
-        dz_dpc0(0, 0) = 1 / p_c0(2);
-        dz_dpc0(1, 1) = 1 / p_c0(2);
-        dz_dpc0(0, 2) = -p_c0(0) / (p_c0(2) * p_c0(2));
-        dz_dpc0(1, 2) = -p_c0(1) / (p_c0(2) * p_c0(2));
+        mynt::Matrix dz_dpc0(4,3);
+        dz_dpc0(0, 0) = 1 / p_c0[2];
+        dz_dpc0(1, 1) = 1 / p_c0[2];
+        dz_dpc0(0, 2) = -p_c0[0] / (p_c0[2] * p_c0[2]);
+        dz_dpc0(1, 2) = -p_c0[1] / (p_c0[2] * p_c0[2]);
 
-        Matrix<double, 4, 3> dz_dpc1 = Matrix<double, 4, 3>::Zero();
-        dz_dpc1(2, 0) = 1 / p_c1(2);
-        dz_dpc1(3, 1) = 1 / p_c1(2);
-        dz_dpc1(2, 2) = -p_c1(0) / (p_c1(2) * p_c1(2));
-        dz_dpc1(3, 2) = -p_c1(1) / (p_c1(2) * p_c1(2));
+        mynt::Matrix dz_dpc1(4,3);
+        dz_dpc1(2, 0) = 1 / p_c1[2];
+        dz_dpc1(3, 1) = 1 / p_c1[2];
+        dz_dpc1(2, 2) = -p_c1[0] / (p_c1[2] * p_c1[2]);
+        dz_dpc1(3, 2) = -p_c1[1] / (p_c1[2] * p_c1[2]);
 
-        Matrix<double, 3, 6> dpc0_dxc = Matrix<double, 3, 6>::Zero();
-        dpc0_dxc.leftCols(3) = skewSymmetric(p_c0);
-        dpc0_dxc.rightCols(3) = -R_w_c0;
+        mynt::Matrix dpc0_dxc(3,6);
+        dpc0_dxc.set_mat(0, 0, mynt::skew_symmetric(p_c0));
+        dpc0_dxc.set_mat(0, 3, -R_w_c0);
 
-        Matrix<double, 3, 6> dpc1_dxc = Matrix<double, 3, 6>::Zero();
-        dpc1_dxc.leftCols(3) = R_c0_c1 * skewSymmetric(p_c0);
-        dpc1_dxc.rightCols(3) = -R_w_c1;
+        mynt::Matrix dpc1_dxc(3,6);
+        dpc1_dxc.set_mat(0, 0, R_c0_c1 * mynt::skew_symmetric(p_c0));
+        dpc1_dxc.set_mat(0, 3, -R_w_c1);
 
-        Matrix3d dpc0_dpg = R_w_c0;
-        Matrix3d dpc1_dpg = R_w_c1;
+        mynt::RotationMatrix dpc0_dpg = R_w_c0;
+        mynt::RotationMatrix dpc1_dpg = R_w_c1;
 
         H_x = dz_dpc0 * dpc0_dxc + dz_dpc1 * dpc1_dxc;
         H_f = dz_dpc0 * dpc0_dpg + dz_dpc1 * dpc1_dpg;
 
         // Modifty the measurement Jacobian to ensure
         // observability constrain.
-        Matrix<double, 4, 6> A = H_x;
-        Matrix<double, 6, 1> u = Matrix<double, 6, 1>::Zero();
-        u.block<3, 1>(0, 0) = quaternionToRotation(
-                cam_state.orientation_null) * IMUState::gravity;
-        u.block<3, 1>(3, 0) = skewSymmetric(
-                p_w - cam_state.position_null) * IMUState::gravity;
-        H_x = A - A * u * (u.transpose() * u).inverse() * u.transpose();
-        H_f = -H_x.block<4, 3>(0, 3);
+        mynt::Matrix A = H_x;
+        mynt::Matrix u(6,1);
+        u.set_mat(0, 0, cam_state.orientation_null.rotation_matrix() * IMUState::gravity);
+        u.set_mat(3, 0, mynt::skew_symmetric(p_w - cam_state.position_null) * IMUState::gravity);
+        H_x = A - A * u * (u.transpose() * u).inv() * u.transpose();
+        H_f = -const_cast<const mynt::Matrix&>(H_x).block<4, 3>(0, 3);
 
         // Compute the residual.
-        r = z - Vector4d(p_c0(0) / p_c0(2), p_c0(1) / p_c0(2),
-                         p_c1(0) / p_c1(2), p_c1(1) / p_c1(2));
+        r = z - mynt::Vector4({p_c0[0] / p_c0[2], p_c0[1] / p_c0[2], p_c1[0] / p_c1[2], p_c1[1] / p_c1[2]});
 
         return;
     }
 
     void MsckfVio::featureJacobian(
-            const FeatureIDType &feature_id,
-            const std::vector<StateIDType> &cam_state_ids,
-            MatrixXd &H_x, VectorXd &r) {
+            const FeatureIDType &feature_id, const std::vector<StateIDType> &cam_state_ids,
+            mynt::Matrix &H_x, mynt::VectorX &r) {
 
         const auto &feature = map_server[feature_id];
 
         // Check how many camera states in the provided camera
         // id camera has actually seen this feature.
-        vector<StateIDType> valid_cam_state_ids(0);
+        std::vector<StateIDType> valid_cam_state_ids(0);
         for (const auto &cam_id : cam_state_ids) {
-            if (feature.observations.find(cam_id) ==
-                feature.observations.end())
+            if (feature.observations.find(cam_id) == feature.observations.end())
                 continue;
 
             valid_cam_state_ids.push_back(cam_id);
@@ -821,67 +695,119 @@ namespace mynt {
         int jacobian_row_size = 0;
         jacobian_row_size = 4 * valid_cam_state_ids.size();
 
-        MatrixXd H_xj = MatrixXd::Zero(jacobian_row_size,
-                                       21 + state_server.cam_states.size() * 6);
-        MatrixXd H_fj = MatrixXd::Zero(jacobian_row_size, 3);
-        VectorXd r_j = VectorXd::Zero(jacobian_row_size);
+        mynt::Matrix H_xj(jacobian_row_size, 21 + state_server.cam_states.size() * 6);
+        mynt::Matrix H_fj(jacobian_row_size, 3);
+        mynt::VectorX r_j(jacobian_row_size);
         int stack_cntr = 0;
 
         for (const auto &cam_id : valid_cam_state_ids) {
-
-            Matrix<double, 4, 6> H_xi = Matrix<double, 4, 6>::Zero();
-            Matrix<double, 4, 3> H_fi = Matrix<double, 4, 3>::Zero();
-            Vector4d r_i = Vector4d::Zero();
+            mynt::Matrix H_xi(4,6);
+            mynt::Matrix H_fi(4,3);
+            mynt::Vector4 r_i;
             measurementJacobian(cam_id, feature.id, H_xi, H_fi, r_i);
 
-            auto cam_state_iter = state_server.cam_states.find(cam_id);
-            int cam_state_cntr = std::distance(
-                    state_server.cam_states.begin(), cam_state_iter);
+                auto cam_state_iter = state_server.cam_states.find(cam_id);
+            int cam_state_cntr = std::distance(state_server.cam_states.begin(), cam_state_iter);
 
             // Stack the Jacobians.
-            H_xj.block<4, 6>(stack_cntr, 21 + 6 * cam_state_cntr) = H_xi;
-            H_fj.block<4, 3>(stack_cntr, 0) = H_fi;
-            r_j.segment<4>(stack_cntr) = r_i;
+            H_xj.set_mat(stack_cntr, 21 + 6 * cam_state_cntr, H_xi);
+            H_fj.set_mat(stack_cntr, 0, H_fi);
+            r_j.set_segment(stack_cntr, r_i);
             stack_cntr += 4;
         }
 
-        // Project the residual and Jacobians onto the nullspace
-        // of H_fj.
-        JacobiSVD<MatrixXd> svd_helper(H_fj, ComputeFullU | ComputeThinV);
-        MatrixXd A = svd_helper.matrixU().rightCols(
-                jacobian_row_size - 3);
+        if(n_pub == 9) {
+            debug_ << "featureJacobian H_xj:\n" << H_xj << std::endl;
+            debug_ << "featureJacobian H_fj:\n" << H_fj << std::endl;
+            debug_ << "featureJacobian r_j:\n" << r_j << std::endl;
+        }
+
+        // Project the residual and Jacobians onto the nullspace of H_fj.
+
+        // TODO: verify
+
+        /// Eigen
+//        Eigen::MatrixXd eH_fj(H_fj.rows(), H_fj.cols());
+//        for(int i=0; i<H_fj.rows(); ++i)
+//            for(int j=0; j<H_fj.cols(); ++j)
+//                eH_fj(i, j) = H_fj(i, j);
+//
+//        Eigen::JacobiSVD<Eigen::MatrixXd> svd_helper(eH_fj, Eigen::ComputeFullU | Eigen::ComputeThinV);
+//        Eigen::MatrixXd eA = svd_helper.matrixU().rightCols(jacobian_row_size - 3);
+//
+//        mynt::Matrix A(eA.rows(), eA.cols());
+//        for(int i=0; i<eA.rows(); ++i)
+//            for(int j=0; j<eA.cols(); ++j)
+//                A(i, j) = eA(i, j);
+
+        /// OpenCV
+//        cv::Mat cvH(H_fj.rows(), H_fj.cols(), CV_32F);
+//        for(int i=0; i<H_fj.rows(); ++i)
+//            for(int j=0; j<H_fj.cols(); ++j)
+//                cvH.at<float>(i, j) = H_fj(i, j);
+//        cv::Mat cvS, cvU, cvVt;
+//        cv::SVD::compute(cvH, cvS, cvU, cvVt, cv::SVD::FULL_UV); // cv::SVD::FULL_UV
+//        int j_start = cvU.cols-(jacobian_row_size-3);
+//        mynt::Matrix A(cvU.rows, jacobian_row_size - 3);
+//        for(int i=0; i<cvU.rows; ++i)
+//            for(int j=j_start; j<cvU.cols; ++j)
+//                A(i, j-j_start) = cvU.at<float>(i, j);
+
+        /// Shen according OpenCV
+        mynt::Matrix U1, W1, Vt1;
+        mynt::svd_fulluv(H_fj, W1, U1, Vt1);
+        int j_start = U1.cols()-(jacobian_row_size-3);
+        mynt::Matrix A(U1.rows(), jacobian_row_size - 3);
+        for(int i=0; i<U1.rows(); ++i)
+            for(int j=j_start; j<U1.cols(); ++j)
+                A(i, j-j_start) = U1(i, j);
 
         H_x = A.transpose() * H_xj;
-        r = A.transpose() * r_j;
+        r   = A.transpose() * r_j;
+
+//        if(n_pub == 9) {
+//            debug_ << "featureJacobian U:\n" << svd_helper.matrixU() << std::endl;
+//            debug_ << "featureJacobian H_x:\n" << H_x << std::endl;
+//            debug_ << "featureJacobian r:\n"   << r << std::endl;
+//        }
 
         return;
     }
 
-    void MsckfVio::measurementUpdate(const MatrixXd &H, const VectorXd &r) {
+    // TODO
+    void MsckfVio::measurementUpdate(const mynt::Matrix &H, const mynt::VectorX &r) {
         if (H.rows() == 0 || r.rows() == 0)
             return;
 
-        // Decompose the final Jacobian matrix to reduce computational
-        // complexity as in Equation (28), (29).
-        MatrixXd H_thin;
-        VectorXd r_thin;
+        /// temp
+        Eigen::MatrixXd He(H.rows(), H.cols());
+        for(int i=0; i<H.rows(); ++i)
+            for(int j=0; j<H.cols(); ++j)
+                He(i,j) = H(i,j);
+        Eigen::VectorXd re(r.size());
+        for(int i=0; i<r.size(); ++i)
+            re[i] = r[i];
+
+        // Decompose the final Jacobian matrix to reduce computational complexity as in Equation (28), (29).
+        Eigen::MatrixXd eH_thin;
+        Eigen::VectorXd er_thin;
 
         if (H.rows() > H.cols()) {
             // Convert H to a sparse matrix.
-            SparseMatrix<double> H_sparse = H.sparseView();
+            Eigen::SparseMatrix<double> H_sparse = He.sparseView();
 
             // Perform QR decompostion on H_sparse.
-            SPQR<SparseMatrix<double> > spqr_helper;
+            Eigen::SPQR<Eigen::SparseMatrix<double> > spqr_helper;
             spqr_helper.setSPQROrdering(SPQR_ORDERING_NATURAL); // SPQR_ORDERING_NATURAL from suitesparse
             spqr_helper.compute(H_sparse);
 
-            MatrixXd H_temp;
-            VectorXd r_temp;
-            (spqr_helper.matrixQ().transpose() * H).evalTo(H_temp);
-            (spqr_helper.matrixQ().transpose() * r).evalTo(r_temp);
+            Eigen::MatrixXd H_temp;
+            Eigen::VectorXd r_temp;
+            (spqr_helper.matrixQ().transpose() * He).evalTo(H_temp);
+            (spqr_helper.matrixQ().transpose() * re).evalTo(r_temp);
 
-            H_thin = H_temp.topRows(21 + state_server.cam_states.size() * 6);
-            r_thin = r_temp.head(21 + state_server.cam_states.size() * 6);
+            eH_thin = H_temp.topRows(21 + state_server.cam_states.size() * 6);
+            er_thin = r_temp.head(21    + state_server.cam_states.size() * 6);
 
 //            HouseholderQR<MatrixXd> qr_helper(H);
 //            MatrixXd Q = qr_helper.householderQ();
@@ -890,76 +816,114 @@ namespace mynt {
 //            H_thin = Q1.transpose() * H;
 //            r_thin = Q1.transpose() * r;
         } else {
-            H_thin = H;
-            r_thin = r;
+            eH_thin = He;
+            er_thin = re;
         }
 
+        mynt::Matrix H_thin(eH_thin.rows(), eH_thin.cols());
+        for(int i=0; i<eH_thin.rows(); ++i)
+            for(int j=0; j<eH_thin.cols(); ++j)
+                H_thin(i,j) = eH_thin(i,j);
+        mynt::VectorX r_thin(er_thin.size());
+        for(int i=0; i<er_thin.size(); ++i)
+            r_thin[i] = er_thin(i);
+
         // Compute the Kalman gain.
-        const MatrixXd &P = state_server.state_cov;
-        MatrixXd S = H_thin * P * H_thin.transpose() +
-                     Feature::observation_noise * MatrixXd::Identity(H_thin.rows(), H_thin.rows());
-        //MatrixXd K_transpose = S.fullPivHouseholderQr().solve(H_thin*P);
-        MatrixXd K_transpose = S.ldlt().solve(H_thin * P);
-        MatrixXd K = K_transpose.transpose();
+        const mynt::Matrix &P = state_server.state_cov;
+        mynt::Matrix S = H_thin * P * H_thin.transpose() + Feature::observation_noise * mynt::Matrix::identity(H_thin.rows(), H_thin.rows());
+        // MatrixXd K_transpose = S.fullPivHouseholderQr().solve(H_thin*P);
+
+        // TODO: verify
+
+        Eigen::MatrixXd eS(S.rows(), S.cols());
+        for(int i=0; i<S.rows(); ++i)
+            for(int j=0; j<S.cols(); ++j)
+                eS(i,j) = S(i,j);
+        Eigen::MatrixXd eP(P.rows(), P.cols());
+        for(int i=0; i<P.rows(); ++i)
+            for(int j=0; j<P.cols(); ++j)
+                eP(i,j) = P(i,j);
+        Eigen::VectorXd er(r.size());
+        for(int i=0; i<r.size(); ++i)
+            er[i] = r[i];
+
+        Eigen::MatrixXd eK_transpose = eS.ldlt().solve(eH_thin * eP);
+        Eigen::MatrixXd eK = eK_transpose.transpose();
+
+        // TODO
+        mynt::Matrix K(eK.rows(), eK.cols());
+        for(int i=0; i<eK.rows(); ++i)
+            for(int j=0; j<eK.cols(); ++j)
+                K(i,j) = eK(i,j);
 
         // Compute the error of the state.
-        VectorXd delta_x = K * r_thin;
+        mynt::VectorX delta_x = K * r_thin;
 
         // Update the IMU state.
-        const VectorXd &delta_x_imu = delta_x.head<21>();
+        const mynt::VectorX &delta_x_imu = delta_x.head<21>();
 
         if (//delta_x_imu.segment<3>(0).norm() > 0.15 ||
             //delta_x_imu.segment<3>(3).norm() > 0.15 ||
-                delta_x_imu.segment<3>(6).norm() > 0.5 ||
+                delta_x_imu.segment<3>(6).l2norm() > 0.5 ||
                 //delta_x_imu.segment<3>(9).norm() > 0.5 ||
-                delta_x_imu.segment<3>(12).norm() > 1.0) {
-            printf("delta velocity: %f\n", delta_x_imu.segment<3>(6).norm());
-            printf("delta position: %f\n", delta_x_imu.segment<3>(12).norm());
+                delta_x_imu.segment<3>(12).l2norm() > 1.0) {
+            printf("delta velocity: %f\n", delta_x_imu.segment<3>(6).l2norm());
+            printf("delta position: %f\n", delta_x_imu.segment<3>(12).l2norm());
             std::cout << "Update change is too large." << std::endl;
             //return;
         }
 
-        const Vector4d dq_imu = smallAngleQuaternion(delta_x_imu.head<3>());
-        state_server.imu_state.orientation = quaternionMultiplication(dq_imu, state_server.imu_state.orientation);
+        const mynt::Quarternion dq_imu = mynt::Quarternion::small_angle_quaternion(delta_x_imu.head<3>());
+        state_server.imu_state.orientation = dq_imu * state_server.imu_state.orientation;
         state_server.imu_state.gyro_bias += delta_x_imu.segment<3>(3);
-        state_server.imu_state.velocity += delta_x_imu.segment<3>(6);
-        state_server.imu_state.acc_bias += delta_x_imu.segment<3>(9);
-        state_server.imu_state.position += delta_x_imu.segment<3>(12);
+        state_server.imu_state.velocity  += delta_x_imu.segment<3>(6);
+        state_server.imu_state.acc_bias  += delta_x_imu.segment<3>(9);
+        state_server.imu_state.position  += delta_x_imu.segment<3>(12);
 
-        const Vector4d dq_extrinsic = smallAngleQuaternion(delta_x_imu.segment<3>(15));
-        state_server.imu_state.R_imu_cam0 = quaternionToRotation(dq_extrinsic) * state_server.imu_state.R_imu_cam0;
+        const mynt::Quarternion dq_extrinsic = mynt::Quarternion::small_angle_quaternion(delta_x_imu.segment<3>(15));
+        state_server.imu_state.R_imu_cam0 = dq_extrinsic.rotation_matrix() * state_server.imu_state.R_imu_cam0;
         state_server.imu_state.t_cam0_imu += delta_x_imu.segment<3>(18);
 
         // Update the camera states.
         auto cam_state_iter = state_server.cam_states.begin();
         for (int i = 0; i < state_server.cam_states.size(); ++i, ++cam_state_iter) {
-            const VectorXd &delta_x_cam = delta_x.segment<6>(21 + i * 6);
-            const Vector4d dq_cam = smallAngleQuaternion(delta_x_cam.head<3>());
-            cam_state_iter->second.orientation = quaternionMultiplication(dq_cam, cam_state_iter->second.orientation);
+            const mynt::VectorX &delta_x_cam = delta_x.segment<6>(21 + i * 6);
+            const mynt::Quarternion dq_cam = mynt::Quarternion::small_angle_quaternion(delta_x_cam.head<3>());
+            cam_state_iter->second.orientation = dq_cam * cam_state_iter->second.orientation;
             cam_state_iter->second.position += delta_x_cam.tail<3>();
         }
 
         // Update state covariance.
-        MatrixXd I_KH = MatrixXd::Identity(K.rows(), H_thin.cols()) - K * H_thin;
+        mynt::Matrix I_KH = mynt::Matrix::identity(K.rows(), H_thin.cols()) - K * H_thin;
         //state_server.state_cov = I_KH*state_server.state_cov*I_KH.transpose() +
         //  K*K.transpose()*Feature::observation_noise;
         state_server.state_cov = I_KH * state_server.state_cov;
 
         // Fix the covariance to be symmetric
-        MatrixXd state_cov_fixed = (state_server.state_cov +
-                                    state_server.state_cov.transpose()) / 2.0;
+        mynt::Matrix state_cov_fixed = (state_server.state_cov + state_server.state_cov.transpose()) / 2.0;
         state_server.state_cov = state_cov_fixed;
 
         return;
     }
 
-    bool MsckfVio::gatingTest(const MatrixXd &H, const VectorXd &r, const int &dof) {
-        MatrixXd P1 = H * state_server.state_cov * H.transpose();
-        MatrixXd P2 = Feature::observation_noise * MatrixXd::Identity(H.rows(), H.rows());
-        double gamma = r.transpose() * (P1 + P2).ldlt().solve(r);
+    bool MsckfVio::gatingTest(const mynt::Matrix &H, const mynt::VectorX &r, const int &dof) {
+        mynt::Matrix P1 = H * state_server.state_cov * H.transpose();
+        mynt::Matrix P2 = Feature::observation_noise * mynt::Matrix::eye(H.rows());
+        mynt::Matrix P = P1 + P2;
 
-        //cout << dof << " " << gamma << " " <<
-        //  chi_squared_test_table[dof] << " ";
+        // TODO: verify
+
+        Eigen::MatrixXd eP(P.rows(), P.cols());
+        for(int i=0; i<P.rows(); ++i)
+            for(int j=0; j<P.cols(); ++j)
+                eP(i,j) = P(i,j);
+        Eigen::VectorXd er(r.size());
+        for(int i=0; i<r.size(); ++i)
+            er[i] = r[i];
+
+        double gamma = er.transpose() * eP.ldlt().solve(er);
+
+        // cout << dof << " " << gamma << " " << chi_squared_test_table[dof] << " ";
 
         if (gamma < chi_squared_test_table[dof]) {
             //cout << "passed" << endl;
@@ -974,25 +938,23 @@ namespace mynt {
         // Remove the features that lost track.
         // BTW, find the size the final Jacobian matrix and residual vector.
         int jacobian_row_size = 0;
-        vector<FeatureIDType> invalid_feature_ids(0);
-        vector<FeatureIDType> processed_feature_ids(0);
+        std::vector<FeatureIDType> invalid_feature_ids(0);
+        std::vector<FeatureIDType> processed_feature_ids(0);
 
-        for (auto iter = map_server.begin();
-             iter != map_server.end(); ++iter) {
+        int n = 0;
+        for (auto iter = map_server.begin(); iter != map_server.end(); ++iter, ++n) {
             // Rename the feature to be checked.
             auto &feature = iter->second;
 
             // Pass the features that are still being tracked.
-            if (feature.observations.find(state_server.imu_state.id) !=
-                feature.observations.end())
+            if (feature.observations.find(state_server.imu_state.id) != feature.observations.end())
                 continue;
             if (feature.observations.size() < 3) {
                 invalid_feature_ids.push_back(feature.id);
                 continue;
             }
 
-            // Check if the feature can be initialized if it
-            // has not been.
+            // Check if the feature can be initialized if it has not been.
             if (!feature.is_initialized) {
                 if (!feature.checkMotion(state_server.cam_states)) {
                     invalid_feature_ids.push_back(feature.id);
@@ -1021,36 +983,35 @@ namespace mynt {
         // Return if there is no lost feature to be processed.
         if (processed_feature_ids.size() == 0) return;
 
-        MatrixXd H_x = MatrixXd::Zero(jacobian_row_size, 21 + 6 * state_server.cam_states.size());
-        VectorXd r = VectorXd::Zero(jacobian_row_size);
+        mynt::Matrix H_x(jacobian_row_size, 21 + 6 * state_server.cam_states.size());
+        mynt::VectorX r(jacobian_row_size);
         int stack_cntr = 0;
 
         // Process the features which lose track.
         for (const auto &feature_id : processed_feature_ids) {
             auto &feature = map_server[feature_id];
 
-            vector<StateIDType> cam_state_ids(0);
+            std::vector<StateIDType> cam_state_ids(0);
             for (const auto &measurement : feature.observations)
                 cam_state_ids.push_back(measurement.first);
 
-            MatrixXd H_xj;
-            VectorXd r_j;
+            mynt::Matrix H_xj;
+            mynt::VectorX r_j;
             featureJacobian(feature.id, cam_state_ids, H_xj, r_j);
 
             if (gatingTest(H_xj, r_j, cam_state_ids.size() - 1)) {
-                H_x.block(stack_cntr, 0, H_xj.rows(), H_xj.cols()) = H_xj;
-                r.segment(stack_cntr, r_j.rows()) = r_j;
+                H_x.set_mat(stack_cntr, 0, H_xj);
+                r.set_segment(stack_cntr, r_j);
                 stack_cntr += H_xj.rows();
             }
 
-            // Put an upper bound on the row size of measurement Jacobian,
-            // which helps guarantee the executation time.
+            // Put an upper bound on the row size of measurement Jacobian, which helps guarantee the executation time.
             if (stack_cntr > 1500)
                 break;
         }
 
-        H_x.conservativeResize(stack_cntr, H_x.cols());
-        r.conservativeResize(stack_cntr);
+        H_x.conservative_resize(stack_cntr, H_x.cols());
+        r.conservative_resize(stack_cntr);
 
         // Perform the measurement update step.
         measurementUpdate(H_x, r);
@@ -1062,7 +1023,7 @@ namespace mynt {
         return;
     }
 
-    void MsckfVio::findRedundantCamStates(vector<StateIDType> &rm_cam_state_ids) {
+    void MsckfVio::findRedundantCamStates(std::vector<StateIDType> &rm_cam_state_ids) {
         // Move the iterator to the key position.
         auto key_cam_state_iter = state_server.cam_states.end();
         for (int i = 0; i < 4; ++i)
@@ -1072,17 +1033,25 @@ namespace mynt {
         auto first_cam_state_iter = state_server.cam_states.begin();
 
         // Pose of the key camera state.
-        const Vector3d key_position = key_cam_state_iter->second.position;
-        const Matrix3d key_rotation = quaternionToRotation(key_cam_state_iter->second.orientation);
+        const mynt::Vector3 key_position = key_cam_state_iter->second.position;
+        const mynt::RotationMatrix key_rotation = key_cam_state_iter->second.orientation.rotation_matrix();
 
         // Mark the camera states to be removed based on the
         // motion between states.
         for (int i = 0; i < 2; ++i) {
-            const Vector3d position = cam_state_iter->second.position;
-            const Matrix3d rotation = quaternionToRotation(cam_state_iter->second.orientation);
+            const mynt::Vector3 position = cam_state_iter->second.position;
+            const mynt::RotationMatrix rotation = cam_state_iter->second.orientation.rotation_matrix();
 
-            double distance = (position - key_position).norm();
-            double angle = AngleAxisd(rotation * key_rotation.transpose()).angle();
+            double distance = (position - key_position).l2norm();
+            mynt::RotationMatrix R = rotation * key_rotation.transpose();
+
+            // TODO [cg]
+            Eigen::Matrix3d m3;
+            for(int i=0; i<3; ++i)
+                for(int j=0; j<3; ++j)
+                    m3(i,j) = R(i,j);
+
+            double angle = Eigen::AngleAxisd(m3).angle();
 
             if (angle < rotation_threshold &&
                 distance < translation_threshold &&
@@ -1106,7 +1075,7 @@ namespace mynt {
             return;
 
         // Find two camera states to be removed.
-        vector<StateIDType> rm_cam_state_ids(0);
+        std::vector<StateIDType> rm_cam_state_ids(0);
         findRedundantCamStates(rm_cam_state_ids);
 
         // Find the size of the Jacobian matrix.
@@ -1115,14 +1084,14 @@ namespace mynt {
             auto &feature = item.second;
             // Check how many camera states to be removed are associated
             // with this feature.
-            vector<StateIDType> involved_cam_state_ids(0);
+            std::vector<StateIDType> involved_cam_state_ids(0);
             for (const auto &cam_id : rm_cam_state_ids) {
-                if (feature.observations.find(cam_id) !=
-                    feature.observations.end())
+                if (feature.observations.find(cam_id) != feature.observations.end())
                     involved_cam_state_ids.push_back(cam_id);
             }
 
-            if (involved_cam_state_ids.size() == 0) continue;
+            if (involved_cam_state_ids.size() == 0)
+                continue;
             if (involved_cam_state_ids.size() == 1) {
                 feature.observations.erase(involved_cam_state_ids[0]);
                 continue;
@@ -1152,30 +1121,30 @@ namespace mynt {
         //cout << "jacobian row #: " << jacobian_row_size << endl;
 
         // Compute the Jacobian and residual.
-        MatrixXd H_x = MatrixXd::Zero(jacobian_row_size, 21 + 6 * state_server.cam_states.size());
-        VectorXd r = VectorXd::Zero(jacobian_row_size);
+        mynt::Matrix H_x(jacobian_row_size, 21 + 6 * state_server.cam_states.size());
+        mynt::VectorX r(jacobian_row_size);
         int stack_cntr = 0;
 
         for (auto &item : map_server) {
             auto &feature = item.second;
             // Check how many camera states to be removed are associated
             // with this feature.
-            vector<StateIDType> involved_cam_state_ids(0);
+            std::vector<StateIDType> involved_cam_state_ids(0);
             for (const auto &cam_id : rm_cam_state_ids) {
-                if (feature.observations.find(cam_id) !=
-                    feature.observations.end())
+                if (feature.observations.find(cam_id) != feature.observations.end())
                     involved_cam_state_ids.push_back(cam_id);
             }
 
-            if (involved_cam_state_ids.size() == 0) continue;
+            if (involved_cam_state_ids.size() == 0)
+                continue;
 
-            MatrixXd H_xj;
-            VectorXd r_j;
+            mynt::Matrix H_xj;
+            mynt::VectorX r_j;
             featureJacobian(feature.id, involved_cam_state_ids, H_xj, r_j);
 
             if (gatingTest(H_xj, r_j, involved_cam_state_ids.size())) {
-                H_x.block(stack_cntr, 0, H_xj.rows(), H_xj.cols()) = H_xj;
-                r.segment(stack_cntr, r_j.rows()) = r_j;
+                H_x.set_mat(stack_cntr, 0, H_xj);
+                r.set_segment(stack_cntr, r_j);
                 stack_cntr += H_xj.rows();
             }
 
@@ -1183,8 +1152,8 @@ namespace mynt {
                 feature.observations.erase(cam_id);
         }
 
-        H_x.conservativeResize(stack_cntr, H_x.cols());
-        r.conservativeResize(stack_cntr);
+        H_x.conservative_resize(stack_cntr, H_x.cols());
+        r.conservative_resize(stack_cntr);
 
         // Perform measurement update.
         measurementUpdate(H_x, r);
@@ -1194,28 +1163,17 @@ namespace mynt {
             int cam_state_start = 21 + 6 * cam_sequence;
             int cam_state_end = cam_state_start + 6;
 
-            // Remove the corresponding rows and columns in the state
-            // covariance matrix.
+            // Remove the corresponding rows and columns in the state covariance matrix.
             if (cam_state_end < state_server.state_cov.rows()) {
-                state_server.state_cov.block(cam_state_start, 0,
-                                             state_server.state_cov.rows() - cam_state_end,
-                                             state_server.state_cov.cols()) =
-                        state_server.state_cov.block(cam_state_end, 0,
-                                                     state_server.state_cov.rows() - cam_state_end,
-                                                     state_server.state_cov.cols());
+                state_server.state_cov.set_mat(cam_state_start, 0,
+                        state_server.state_cov.block(cam_state_end, 0, state_server.state_cov.rows() - cam_state_end, state_server.state_cov.cols()));
 
-                state_server.state_cov.block(0, cam_state_start,
-                                             state_server.state_cov.rows(),
-                                             state_server.state_cov.cols() - cam_state_end) =
-                        state_server.state_cov.block(0, cam_state_end,
-                                                     state_server.state_cov.rows(),
-                                                     state_server.state_cov.cols() - cam_state_end);
+                state_server.state_cov.set_mat(0, cam_state_start,
+                        state_server.state_cov.block(0, cam_state_end, state_server.state_cov.rows(), state_server.state_cov.cols() - cam_state_end));
 
-                state_server.state_cov.conservativeResize(
-                        state_server.state_cov.rows() - 6, state_server.state_cov.cols() - 6);
+                state_server.state_cov.conservative_resize(state_server.state_cov.rows() - 6, state_server.state_cov.cols() - 6);
             } else {
-                state_server.state_cov.conservativeResize(
-                        state_server.state_cov.rows() - 6, state_server.state_cov.cols() - 6);
+                state_server.state_cov.conservative_resize(state_server.state_cov.rows() - 6, state_server.state_cov.cols() - 6);
             }
 
             // Remove this camera state in the state vector.
@@ -1258,10 +1216,10 @@ namespace mynt {
         gyro_bias_cov = cfg_msckfvio["initial_covariance/gyro_bias"].as<double>();
         acc_bias_cov  = cfg_msckfvio["initial_covariance/acc_bias"].as<double>();
         double extrinsic_rotation_cov, extrinsic_translation_cov;
-        extrinsic_rotation_cov = cfg_msckfvio["initial_covariance/extrinsic_rotation_cov"].as<double>();
+        extrinsic_rotation_cov    = cfg_msckfvio["initial_covariance/extrinsic_rotation_cov"].as<double>();
         extrinsic_translation_cov = cfg_msckfvio["initial_covariance/extrinsic_translation_cov"].as<double>();
 
-        state_server.state_cov = MatrixXd::Zero(21, 21);
+        state_server.state_cov = mynt::Matrix(21, 21);
         for (int i = 3; i < 6; ++i)
             state_server.state_cov(i, i) = gyro_bias_cov;
         for (int i = 6; i < 9; ++i)
@@ -1280,26 +1238,17 @@ namespace mynt {
     void MsckfVio::publish(double time_stamp) {
         // Convert the IMU frame to the body frame.
         const IMUState &imu_state = state_server.imu_state;
-        Eigen::Isometry3d T_i_w = Eigen::Isometry3d::Identity();
-        T_i_w.linear() = quaternionToRotation(imu_state.orientation).transpose();
-        T_i_w.translation() = imu_state.position;
 
-        Eigen::Isometry3d T_b_w = IMUState::T_imu_body * T_i_w * IMUState::T_imu_body.inverse();
-        Eigen::Vector3d body_velocity = IMUState::T_imu_body.linear() * imu_state.velocity;
+        mynt::EuclideanTransform T_i_w;
+        T_i_w.set_rotation_matrix(imu_state.orientation.rotation_matrix().transpose());
+        T_i_w.set_translation(imu_state.position);
 
-//        // Publish tf
-//        bool publish_tf = false;
-//        if (publish_tf) {
-//            tf::Transform T_b_w_tf;
-//            tf::transformEigenToTF(T_b_w, T_b_w_tf);
-//            tf_pub.sendTransform(tf::StampedTransform(
-//                    T_b_w_tf, time, fixed_frame_id, child_frame_id));
-//        }
+        mynt::EuclideanTransform T_b_w = IMUState::T_imu_body * T_i_w * IMUState::T_imu_body.inv();
 
-        // Publish the odometry: T_b_w, body_velocity
-        Eigen::Matrix3d m3_r = T_b_w.rotation();
-        Eigen::Vector3d v3_t = T_b_w.translation();
-        Eigen::Quaterniond q4_r(m3_r);
+        // Publish the odometry: T_b_w
+        mynt::RotationMatrix m3_r = T_b_w.rotation_matrix();
+        mynt::Vector3 v3_t = T_b_w.translation();
+        mynt::Quarternion q4_r = m3_r.quarternion_hamilton(); // Hamilton for draw
 
         path_.push_back(v3_t);
 
@@ -1311,17 +1260,23 @@ namespace mynt {
         std::cout << std::fixed << time_stamp << " " << v3_t[0] << " " << v3_t[1] << " " << v3_t[2] << std::endl;
 
         // Convert the covariance.
-        Matrix3d P_oo = state_server.state_cov.block<3, 3>(0, 0);
-        Matrix3d P_op = state_server.state_cov.block<3, 3>(0, 12);
-        Matrix3d P_po = state_server.state_cov.block<3, 3>(12, 0);
-        Matrix3d P_pp = state_server.state_cov.block<3, 3>(12, 12);
-        Matrix<double, 6, 6> P_imu_pose = Matrix<double, 6, 6>::Zero();
-        P_imu_pose << P_pp, P_po, P_op, P_oo;
+        mynt::Matrix P_oo = const_cast<const mynt::Matrix&>(state_server.state_cov).block<3, 3>(0, 0);
+        mynt::Matrix P_op = const_cast<const mynt::Matrix&>(state_server.state_cov).block<3, 3>(0, 12);
+        mynt::Matrix P_po = const_cast<const mynt::Matrix&>(state_server.state_cov).block<3, 3>(12, 0);
+        mynt::Matrix P_pp = const_cast<const mynt::Matrix&>(state_server.state_cov).block<3, 3>(12, 12);
 
-        Matrix<double, 6, 6> H_pose = Matrix<double, 6, 6>::Zero();
-        H_pose.block<3, 3>(0, 0) = IMUState::T_imu_body.linear();
-        H_pose.block<3, 3>(3, 3) = IMUState::T_imu_body.linear();
-        Matrix<double, 6, 6> P_body_pose = H_pose * P_imu_pose * H_pose.transpose();
+        // TODO: verify
+        mynt::Matrix P_imu_pose(6,6);
+        P_imu_pose.set_mat(0, 0, P_pp);
+        P_imu_pose.set_mat(0, 3, P_po);
+        P_imu_pose.set_mat(3, 0, P_op);
+        P_imu_pose.set_mat(3, 3, P_oo);
+
+        mynt::Matrix H_pose(6,6);
+        H_pose.set_mat(0, 0, IMUState::T_imu_body.rotation_matrix());
+        H_pose.set_mat(3, 3, IMUState::T_imu_body.rotation_matrix());
+
+        mynt::Matrix P_body_pose = H_pose * P_imu_pose * H_pose.transpose();
 
         std::vector<double> covariance_pose(36,0);
         for (int i = 0; i < 6; ++i)
@@ -1330,27 +1285,21 @@ namespace mynt {
 
         // Construct the covariance for the velocity.
         std::vector<double> covariance_twist(36,0);
-        Matrix3d P_imu_vel = state_server.state_cov.block<3, 3>(6, 6);
-        Matrix3d H_vel = IMUState::T_imu_body.linear();
-        Matrix3d P_body_vel = H_vel * P_imu_vel * H_vel.transpose();
+        mynt::Matrix P_imu_vel = const_cast<const mynt::Matrix&>(state_server.state_cov).block<3, 3>(6, 6);
+        mynt::Matrix H_vel = IMUState::T_imu_body.rotation_matrix();
+        mynt::Matrix P_body_vel = H_vel * P_imu_vel * H_vel.transpose();
         for (int i = 0; i < 3; ++i)
             for (int j = 0; j < 3; ++j)
                 covariance_twist[i * 6 + j] = P_body_vel(i, j);
 
-        // TODO
-//        // Publish the 3D positions of the features that
-//        // has been initialized.
-//        pcl::PointCloud<pcl::PointXYZ>::Ptr feature_msg_ptr(new pcl::PointCloud<pcl::PointXYZ>());
-//        feature_msg_ptr->height = 1;
-//        for (const auto &item : map_server) {
-//            const auto &feature = item.second;
-//            if (feature.is_initialized) {
-//                Vector3d feature_position = IMUState::T_imu_body.linear() * feature.position;
-//                feature_msg_ptr->points.push_back(pcl::PointXYZ(feature_position(0), feature_position(1), feature_position(2)));
-//            }
-//        }
-//        feature_msg_ptr->width = feature_msg_ptr->points.size();
-//        feature_pub.publish(feature_msg_ptr);
+        // Publish the 3D positions of the features that has been initialized.
+        for (const auto &item : map_server) {
+            const auto &feature = item.second;
+            if (feature.is_initialized) {
+                mynt::Vector3 feature_position = IMUState::T_imu_body.rotation_matrix() * feature.position;
+                points3d_.push_back(mynt::Point3f(feature_position[0], feature_position[1], feature_position[2]));
+            }
+        }
 
         return;
     }

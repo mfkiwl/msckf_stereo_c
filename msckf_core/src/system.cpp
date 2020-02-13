@@ -37,8 +37,8 @@ namespace mynt {
 //        msckfvio_ptr_->resetCallback();
     }
 
-    void System::stereo_callback(const mynt::Image &cam0_img, const mynt::Image &cam1_img) {
-        imgproc_ptr_->stereoCallback(cam0_img, cam1_img);
+    void System::stereo_callback(const mynt::Image &cam0_img, const mynt::Image &cam1_img, bool is_draw) {
+        imgproc_ptr_->stereoCallback(cam0_img, cam1_img, is_draw);
         feature_msg_ptr_ = imgproc_ptr_->feature_msg_ptr_;
     }
 
@@ -50,6 +50,7 @@ namespace mynt {
     void System::backend_callback() {
         msckfvio_ptr_->featureCallback(feature_msg_ptr_);
         path_to_draw_ = msckfvio_ptr_->get_path();
+        points3d_to_draw_ = msckfvio_ptr_->get_points3d();
     }
 }
 

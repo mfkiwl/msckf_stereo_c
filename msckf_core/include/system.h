@@ -10,6 +10,7 @@
 
 #include "image_processor.h"
 #include "msckf_vio.h"
+#include "maths/vector.h"
 
 namespace mynt {
     class System {
@@ -17,23 +18,26 @@ namespace mynt {
         System(std::string file_cam_imu);
         ~System();
 
-        void stereo_callback(const mynt::Image &cam0_img, const mynt::Image &cam1_img);
+        void stereo_callback(const mynt::Image &cam0_img, const mynt::Image &cam1_img, bool is_draw = false);
 
         void imu_callback(const mynt::ImuConstPtr &msg);
 
         void backend_callback();
 
-        std::vector<Eigen::Vector3d> path_to_draw_;
+        std::vector<mynt::Vector3> path_to_draw_;
 
-        typedef boost::shared_ptr<System> Ptr;
-        typedef boost::shared_ptr<const System> ConstPtr;
+        std::vector<mynt::Point3f> points3d_to_draw_;
+
+        mynt::ImageProcessorPtr imgproc_ptr_;
+
+        typedef std::shared_ptr<System> Ptr;
+        typedef std::shared_ptr<const System> ConstPtr;
 
     private:
         YAML::Node cfg_cam_imu_;
 
-        boost::shared_ptr<CameraMeasurement> feature_msg_ptr_;
+        std::shared_ptr<CameraMeasurement> feature_msg_ptr_;
 
-        mynt::ImageProcessorPtr imgproc_ptr_;
         mynt::MsckfVioPtr msckfvio_ptr_;
     };
 

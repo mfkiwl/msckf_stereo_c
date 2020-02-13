@@ -9,7 +9,7 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 
-#include <Eigen/Core>
+#include "maths/vector.h"
 
 #include <pangolin/pangolin.h>
 using namespace pangolin;
@@ -65,7 +65,11 @@ void process_image_data() {
         for(int j=0; j<num_cams; ++j) {
             imgs[j].time_stamp = data_img[j][i].first*1e-9; // to seconds;
             std::string img_path = euroc_dir + "/cam" + std::to_string(j) + "/data/" + data_img[j][i].second;
-            imgs[j].image = cv::imread(img_path, 0);
+//            imgs[j].image = cv::imread(img_path, 0);
+            cv::Mat mat_img = cv::imread(img_path, 0);
+            mynt::YImg8 yimg(mat_img.rows, mat_img.cols);
+            memcpy(yimg.data(), mat_img.data, yimg.size().area());
+            imgs[j].image = yimg;
             if (imgs[j].image.empty()) {
                 std::cerr << "ERROR: img is empty !!!" << std::endl;
                 continue;
@@ -103,19 +107,19 @@ void process_imu_data() {
         std::string nanoseconds = s.substr(s.size() - 9, 9);
         std::string seconds = s.substr(0, s.size() - 9);
         double stamp_ns = std::stoi(seconds) * 1e9 + std::stoi(nanoseconds);
-        Eigen::Vector3d gyr;
+        mynt::Vector3 gyr;
         for (int j = 0; j < 3; ++j) {
             std::getline(stream, s, ',');
             gyr[j] = std::stof(s);
         }
-        Eigen::Vector3d acc;
+        mynt::Vector3 acc;
         for (int j = 0; j < 3; ++j) {
             std::getline(stream, s, ',');
             acc[j] = std::stof(s);
         }
         // std::cout << "imu: " << gyr.transpose() << ", " << acc.transpose() << std::endl;
 
-        boost::shared_ptr<mynt::Imu> imu(new mynt::Imu);
+        std::shared_ptr<mynt::Imu> imu(new mynt::Imu);
         imu->time_stamp = stamp_ns*1e-9; // to seconds
         imu->angular_velocity = gyr;
         imu->linear_acceleration = acc;
@@ -178,8 +182,8 @@ void draw() {
         int nPath_size = system_ptr->path_to_draw_.size();
         for(int i = 0; i < nPath_size-1; ++i)
         {
-            glVertex3f(system_ptr->path_to_draw_[i].x(), system_ptr->path_to_draw_[i].y(), system_ptr->path_to_draw_[i].z());
-            glVertex3f(system_ptr->path_to_draw_[i+1].x(), system_ptr->path_to_draw_[i+1].y(), system_ptr->path_to_draw_[i+1].z());
+            glVertex3f(system_ptr->path_to_draw_[i][0], system_ptr->path_to_draw_[i][1], system_ptr->path_to_draw_[i][2]);
+            glVertex3f(system_ptr->path_to_draw_[i+1][0], system_ptr->path_to_draw_[i+1][1], system_ptr->path_to_draw_[i+1][2]);
         }
         glEnd();
 
