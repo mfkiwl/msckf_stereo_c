@@ -4,27 +4,30 @@ modified version of msckf_vio
 
 -----
 
+## Dependencies
+
+* mynt_basic_algthms
+  ```sh
+  cd msckf_core
+  git clone git@github.com:cggos/vikit_cg.git mynt_basic_algthms
+  ```
+
 ## Build
 
-```sh
-mkdir build
-cd build
-cmake ..
-make -j3
-```
+* build the project
+  ```sh
+  mkdir build
+  cd build
+  cmake ..
+  make -j3
+  ```
 
 ## Run
 
 * main project
   ```sh
   cd build
-  ./run_euroc
-  ```
-
-* unit test
-  ```sh
-  cd build
-  ./test/run_unit_test
+  ./run_xxx
   ```
 
 ## Test Dataset

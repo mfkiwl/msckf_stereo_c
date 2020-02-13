@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 2.8)
 
-project(msckf_vio_mynt)
-
-option(BUILD_TEST "build unit test" OFF)
+project(msckf_mynt)
 
 set(CMAKE_BUILD_TYPE "Release")
 set(CMAKE_CXX_STANDARD 11)
