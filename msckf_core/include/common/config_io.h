@@ -2,17 +2,19 @@
 // Created by cg on 8/20/19.
 //
 
-#ifndef MSCKF_VIO_MYNT_CONFIG_IO_H
-#define MSCKF_VIO_MYNT_CONFIG_IO_H
+#ifndef MSCKF_CONFIG_IO_H
+#define MSCKF_CONFIG_IO_H
 
 #include <yaml-cpp/yaml.h>
-#include <Eigen/Core>
+
+#include "maths/vector.h"
+#include "maths/mat.h"
 
 namespace YAML {
     // Vector2d
     template<>
-    struct convert<Eigen::Vector2d> {
-        static bool decode(const Node& node, Eigen::Vector2d& rhs) {
+    struct convert<cg::Vector2> {
+        static bool decode(const Node& node, cg::Vector2& rhs) {
             if(!node.IsSequence() || node.size() != 2) {
                 return false;
             }
@@ -24,8 +26,8 @@ namespace YAML {
 
     // Vector3d
     template<>
-    struct convert<Eigen::Vector3d> {
-        static bool decode(const Node& node, Eigen::Vector3d& rhs) {
+    struct convert<cg::Vector3> {
+        static bool decode(const Node& node, cg::Vector3& rhs) {
             if(!node.IsSequence() || node.size() != 3) {
                 return false;
             }
@@ -38,8 +40,8 @@ namespace YAML {
 
     // Vector4d
     template<>
-    struct convert<Eigen::Vector4d> {
-        static Node encode(const Eigen::Vector4d& rhs) {
+    struct convert<cg::Vector4> {
+        static Node encode(const cg::Vector4& rhs) {
             Node node;
             node.push_back(rhs[0]);
             node.push_back(rhs[1]);
@@ -48,7 +50,7 @@ namespace YAML {
             return node;
         }
 
-        static bool decode(const Node& node, Eigen::Vector4d& rhs) {
+        static bool decode(const Node& node, cg::Vector4& rhs) {
             if(!node.IsSequence() || node.size() != 4) {
                 return false;
             }
@@ -62,13 +64,11 @@ namespace YAML {
 
     // Matrix4d
     template<>
-    struct convert<Eigen::Matrix4d> {
-        static bool decode(const Node& node, Eigen::Matrix4d& rhs) {
+    struct convert<cg::Mat4> {
+        static bool decode(const Node& node, cg::Mat4& rhs) {
             if(!node.IsSequence() || node.size() != 16) {
                 return false;
             }
-//            for(int i=0; i<16; ++i)
-//                rhs.data()[i] = node[i].as<double>();
 
             for(int i=0; i<4; ++i)
                 for(int j=0; j<4; ++j)
@@ -79,9 +79,4 @@ namespace YAML {
     };
 }
 
-class ConfigIO {
-public:
-    ConfigIO() {}
-};
-
-#endif //MSCKF_VIO_MYNT_CONFIG_IO_H
+#endif //MSCKF_CONFIG_IO_H

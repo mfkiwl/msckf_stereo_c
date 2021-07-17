@@ -2,30 +2,30 @@
 // Created by cg on 8/20/19.
 //
 
-#ifndef MSCKF_VIO_MYNT_DATA_MSG_H
-#define MSCKF_VIO_MYNT_DATA_MSG_H
+#ifndef MSCKF_DATA_MSG_H
+#define MSCKF_DATA_MSG_H
 
-#include <boost/shared_ptr.hpp>
+//#include <boost/shared_ptr.hpp>
 
-#include <Eigen/Core>
-#include <opencv2/core.hpp>
+#include "maths/vector.h"
+#include "cv/yimg.h"
 
-namespace mynt {
+namespace cg {
 
     struct Image {
         double time_stamp;
-        cv::Mat image;
+        cg::YImg8 image;
     };
-    typedef boost::shared_ptr<Image> ImagePtr;
-    typedef boost::shared_ptr<const Image> ImageConstPtr;
+    typedef std::shared_ptr<Image> ImagePtr;
+    typedef std::shared_ptr<const Image> ImageConstPtr;
 
     struct Imu {
         double time_stamp;
-        Eigen::Vector3d angular_velocity;
-        Eigen::Vector3d linear_acceleration;
+        cg::Vector3 angular_velocity;
+        cg::Vector3 linear_acceleration;
     };
-    typedef boost::shared_ptr<Imu> ImuPtr;
-    typedef boost::shared_ptr<const Imu> ImuConstPtr;
+    typedef std::shared_ptr<Imu> ImuPtr;
+    typedef std::shared_ptr<const Imu> ImuConstPtr;
 
     struct FeatureMeasurement {
         unsigned int id;
@@ -35,15 +35,15 @@ namespace mynt {
         double u1; // horizontal coordinate in cam0
         double v1; // vertical coordinate in cam0
     };
-    typedef boost::shared_ptr<FeatureMeasurement> FeatureMeasurementPtr;
-    typedef boost::shared_ptr<const FeatureMeasurement> FeatureMeasurementConstPtr;
+    typedef std::shared_ptr<FeatureMeasurement> FeatureMeasurementPtr;
+    typedef std::shared_ptr<const FeatureMeasurement> FeatureMeasurementConstPtr;
 
     struct CameraMeasurement {
         double time_stamp;
         std::vector<FeatureMeasurement> features;
     };
-    typedef boost::shared_ptr<CameraMeasurement> CameraMeasurementPtr;
-    typedef boost::shared_ptr<const CameraMeasurement> CameraMeasurementConstPtr;
+    typedef std::shared_ptr<CameraMeasurement> CameraMeasurementPtr;
+    typedef std::shared_ptr<const CameraMeasurement> CameraMeasurementConstPtr;
 
     struct TrackingInfo {
         double time_stamp;
@@ -55,4 +55,4 @@ namespace mynt {
     };
 }
 
-#endif //MSCKF_VIO_MYNT_DATA_MSG_H
+#endif //MSCKF_DATA_MSG_H

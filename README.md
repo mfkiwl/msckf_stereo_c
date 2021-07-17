@@ -1,30 +1,36 @@
-# msckf_vio_mynt
+# msckf_stereo_c
 
 modified version of msckf_vio
 
 -----
 
+## Dependencies
+
+* vikit_cg
+  ```sh
+  cd msckf_core
+  git clone https://github.com/cggos/vikit_cg.git
+  ```
+
 ## Build
 
-```sh
-mkdir build
-cd build
-cmake ..
-make -j3
-```
+* build the project
+  ```sh
+  mkdir build
+  cd build
+  cmake ..
+  make -j2
+  ```
 
 ## Run
 
 * main project
   ```sh
   cd build
-  ./run_euroc
-  ```
-
-* unit test
-  ```sh
-  cd build
-  ./test/run_unit_test
+  
+  ./run_euroc_single_thread <path-to-euroc-mav0-dir> # good, e.g. V1_01_easy/mav0/
+  # or
+  ./run_euroc_muitl_threads <path-to-euroc-mav0-dir> # bad, have problems to deal with
   ```
 
 ## Test Dataset
@@ -94,12 +100,12 @@ evaluate the SLAM/tracking results **pose_out.txt** with the groundtruth of V1_0
   - [x] 将ROS数据结构为Plain C++数据结构（1 Day）
   - [x] 测试、调试（1 Day）
 - [x] 添加 Draw 线程：轨迹渲染显示（1 Day）
-- [ ] 系统测试、调试（1-2 Day）
-- [ ] 代码重构（1 Day）
-- [ ] 第三方库替换
-  - [ ] PCL（1 Day）
-  - [ ] OpenCV（1-2 Day）
-  - [ ] Eigen3（1-2 Day）
+- [x] 系统测试、调试（1-2 Day）
+- [x] 代码重构（1 Day）
+- [x] 第三方库替换
+  - [x] PCL（1 Day）
+  - [x] OpenCV（1-2 Day）
+  - [x] Eigen3（1-2 Day）
   - [ ] 测试、调试（1-2 Day）
 - [ ] 功能优化
 - [ ] C代码重构

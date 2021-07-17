@@ -10,21 +10,20 @@
 
 #include <vector>
 #include <map>
-
-#include <opencv2/core.hpp>
-#include <opencv2/highgui.hpp>
-#include <opencv2/imgproc.hpp>
-#include <opencv2/features2d.hpp>
+#include <fstream>
 
 #include "common/data_msg.h"
 #include "common/config_io.h"
+#include "maths/vector.h"
+#include "cv/types.h"
+#include "cv/corner_detector.h"
+#include "kinematics/rotation_matrix.h"
 
-namespace mynt {
+namespace cg {
 
-/*
- * @brief ImageProcessor Detects and tracks features
- *    in image sequences.
- */
+    /**
+     * @brief ImageProcessor Detects and tracks features in image sequences.
+     */
     class ImageProcessor {
     public:
         // Constructor
@@ -41,29 +40,35 @@ namespace mynt {
         // Initialize the object.
         bool initialize();
 
-        /*
+        /**
         * @brief stereoCallback
         *    Callback function for the stereo images.
         * @param cam0_img left image.
         * @param cam1_img right image.
         */
-        void stereoCallback(const mynt::Image &cam0_img, const mynt::Image &cam1_img);
+        void stereoCallback(const cg::Image &cam0_img, const cg::Image &cam1_img, bool is_draw = false);
 
-        /*
+        /**
          * @brief imuCallback
          *    Callback function for the imu message.
          * @param msg IMU msg.
          */
-        void imuCallback(const mynt::ImuConstPtr &msg);
+        void imuCallback(const cg::ImuConstPtr &msg);
 
-        boost::shared_ptr<CameraMeasurement> feature_msg_ptr_;
+        std::shared_ptr<CameraMeasurement> feature_msg_ptr_;
 
-        typedef boost::shared_ptr<ImageProcessor> Ptr;
-        typedef boost::shared_ptr<const ImageProcessor> ConstPtr;
+        /**
+         * @brief FeatureIDType An alias for unsigned long long int.
+         */
+        typedef unsigned long long int FeatureIDType;
 
-    private:
+        std::vector<FeatureIDType> prev_ids_;
+        std::map<FeatureIDType, cg::Point2f> prev_cam0_points_;
+        std::map<FeatureIDType, cg::Point2f> prev_cam1_points_;
+        std::map<FeatureIDType, cg::Point2f> curr_cam0_points_;
+        std::map<FeatureIDType, cg::Point2f> curr_cam1_points_;
 
-        /*
+        /**
          * @brief ProcessorConfig Configuration parameters for
          *    feature detection and tracking.
          */
@@ -82,11 +87,12 @@ namespace mynt {
             double stereo_threshold;
         };
 
-        /*
-         * @brief FeatureIDType An alias for unsigned long long int.
-         */
-        typedef unsigned long long int FeatureIDType;
+        ProcessorConfig processor_config;
 
+        typedef std::shared_ptr<ImageProcessor> Ptr;
+        typedef std::shared_ptr<const ImageProcessor> ConstPtr;
+
+    private:
         /*
          * @brief FeatureMetaData Contains necessary information
          *    of a feature for easy access.
@@ -95,8 +101,8 @@ namespace mynt {
             FeatureIDType id;
             float response;
             int lifetime;
-            cv::Point2f cam0_point;
-            cv::Point2f cam1_point;
+            cg::Point2f cam0_point;
+            cg::Point2f cam1_point;
         };
 
         /*
@@ -111,11 +117,11 @@ namespace mynt {
          *    Compare two keypoints based on the response.
          */
         static bool keyPointCompareByResponse(
-                const cv::KeyPoint &pt1,
-                const cv::KeyPoint &pt2) {
+                const std::pair<cg::Point2f, double> &pt1,
+                const std::pair<cg::Point2f, double> &pt2) {
             // Keypoint with higher response will be at the
             // beginning of the vector.
-            return pt1.response > pt2.response;
+            return pt1.second > pt2.second;
         }
 
         /*
@@ -147,12 +153,6 @@ namespace mynt {
          *    Load parameters from the parameter server.
          */
         bool loadParameters();
-
-//        /*
-//         * @brief createRosIO
-//         *    Create ros publisher and subscirbers.
-//         */
-//        bool createRosIO();
 
         /*
          * @initializeFirstFrame
@@ -191,20 +191,6 @@ namespace mynt {
         void publish();
 
         /*
-         * @brief drawFeaturesMono
-         *    Draw tracked and newly detected features on the left
-         *    image only.
-         */
-        void drawFeaturesMono();
-
-        /*
-         * @brief drawFeaturesStereo
-         *    Draw tracked and newly detected features on the
-         *    stereo images.
-         */
-        void drawFeaturesStereo();
-
-        /*
          * @brief createImagePyramids
          *    Create image pyramids used for klt tracking.
          */
@@ -219,7 +205,7 @@ namespace mynt {
          * @return cam1_R_p_c: a rotation matrix which takes a vector
          *    from previous cam1 frame to current cam1 frame.
          */
-        void integrateImuData(cv::Matx33f &cam0_R_p_c, cv::Matx33f &cam1_R_p_c);
+        void integrateImuData(cg::RotationMatrix &cam0_R_p_c, cg::RotationMatrix &cam1_R_p_c);
 
         /*
          * @brief predictFeatureTracking Compensates the rotation
@@ -235,10 +221,10 @@ namespace mynt {
          * Note that the input and output points are of pixel coordinates.
          */
         void predictFeatureTracking(
-                const std::vector<cv::Point2f> &input_pts,
-                const cv::Matx33f &R_p_c,
-                const cv::Vec4d &intrinsics,
-                std::vector<cv::Point2f> &compenstated_pts);
+                const std::vector<cg::Point2f> &input_pts,
+                const cg::RotationMatrix &R_p_c,
+                const cg::Vector4 &intrinsics,
+                std::vector<cg::Point2f> &compensated_pts);
 
         /*
          * @brief twoPointRansac Applies two point ransac algorithm
@@ -255,35 +241,32 @@ namespace mynt {
          * @return inlier_flag: 1 for inliers and 0 for outliers.
          */
         void twoPointRansac(
-                const std::vector<cv::Point2f> &pts1,
-                const std::vector<cv::Point2f> &pts2,
-                const cv::Matx33f &R_p_c,
-                const cv::Vec4d &intrinsics,
+                const std::vector<cg::Point2f> &pts1,
+                const std::vector<cg::Point2f> &pts2,
+                const cg::RotationMatrix &R_p_c,
+                const cg::Vector4 &intrinsics,
                 const std::string &distortion_model,
-                const cv::Vec4d &distortion_coeffs,
+                const cg::Vector4 &distortion_coeffs,
                 const double &inlier_error,
                 const double &success_probability,
                 std::vector<int> &inlier_markers);
 
         void undistortPoints(
-                const std::vector<cv::Point2f> &pts_in,
-                const cv::Vec4d &intrinsics,
+                const std::vector<cg::Point2f> &pts_in,
+                const cg::Vector4 &intrinsics,
                 const std::string &distortion_model,
-                const cv::Vec4d &distortion_coeffs,
-                std::vector<cv::Point2f> &pts_out,
-                const cv::Matx33d &rectification_matrix = cv::Matx33d::eye(),
-                const cv::Vec4d &new_intrinsics = cv::Vec4d(1, 1, 0, 0));
+                const cg::Vector4 &distortion_coeffs,
+                std::vector<cg::Point2f> &pts_out,
+                const cg::Mat3 &rectification_matrix = cg::Matrix::eye(3),
+                const cg::Vector4 &new_intrinsics = cg::Vector4({1, 1, 0, 0}));
 
-        void rescalePoints(
-                std::vector<cv::Point2f> &pts1,
-                std::vector<cv::Point2f> &pts2,
-                float &scaling_factor);
+        void rescalePoints(std::vector<cg::Point2f> &pts1, std::vector<cg::Point2f> &pts2, float &scaling_factor);
 
-        std::vector<cv::Point2f> distortPoints(
-                const std::vector<cv::Point2f> &pts_in,
-                const cv::Vec4d &intrinsics,
+        std::vector<cg::Point2f> distortPoints(
+                const std::vector<cg::Point2f> &pts_in,
+                const cg::Vector4 &intrinsics,
                 const std::string &distortion_model,
-                const cv::Vec4d &distortion_coeffs);
+                const cg::Vector4 &distortion_coeffs);
 
         /*
          * @brief stereoMatch Matches features with stereo image pairs.
@@ -292,8 +275,8 @@ namespace mynt {
          * @return inlier_markers: 1 if the match is valid, 0 otherwise.
          */
         void stereoMatch(
-                const std::vector<cv::Point2f> &cam0_points,
-                std::vector<cv::Point2f> &cam1_points,
+                const std::vector<cg::Point2f> &cam0_points,
+                std::vector<cg::Point2f> &cam1_points,
                 std::vector<unsigned char> &inlier_markers);
 
         /*
@@ -312,11 +295,11 @@ namespace mynt {
                 const std::vector<unsigned char> &markers,
                 std::vector<T> &refined_vec) {
             if (raw_vec.size() != markers.size()) {
-                printf("The input size of raw_vec(%lu) and markers(%lu) does not match...",
-                         raw_vec.size(), markers.size());
+                printf("The input size of raw_vec(%lu) and markers(%lu) does not match...", raw_vec.size(), markers.size());
             }
             for (int i = 0; i < markers.size(); ++i) {
-                if (markers[i] == 0) continue;
+                if (markers[i] == 0)
+                    continue;
                 refined_vec.push_back(raw_vec[i]);
             }
             return;
@@ -331,52 +314,52 @@ namespace mynt {
         FeatureIDType next_feature_id;
 
         // Feature detector
-        ProcessorConfig processor_config;
-        cv::Ptr<cv::Feature2D> detector_ptr;
+//        cv::Ptr<cv::Feature2D> detector_ptr;
+        CornerDetector detector_;
 
         // IMU message buffer.
-        std::vector<mynt::Imu> imu_msg_buffer;
+        std::vector<cg::Imu> imu_msg_buffer;
 
         // Camera calibration parameters
         std::string cam0_distortion_model;
-        cv::Vec2i cam0_resolution;
-        cv::Vec4d cam0_intrinsics;
-        cv::Vec4d cam0_distortion_coeffs;
+        cg::Vector4 cam0_intrinsics;
+        cg::Vector4 cam0_distortion_coeffs;
 
         std::string cam1_distortion_model;
-        cv::Vec2i cam1_resolution;
-        cv::Vec4d cam1_intrinsics;
-        cv::Vec4d cam1_distortion_coeffs;
+        cg::Vector4 cam1_intrinsics;
+        cg::Vector4 cam1_distortion_coeffs;
 
         // Take a vector from cam0 frame to the IMU frame.
-        Eigen::Matrix3d R_cam0_imu;
-        Eigen::Vector3d t_cam0_imu;
+        cg::RotationMatrix R_cam0_imu;
+        cg::Vector3 t_cam0_imu;
         // Take a vector from cam1 frame to the IMU frame.
-        Eigen::Matrix3d R_cam1_imu;
-        Eigen::Vector3d t_cam1_imu;
+        cg::RotationMatrix R_cam1_imu;
+        cg::Vector3 t_cam1_imu;
 
         // Previous and current images
-        boost::shared_ptr<mynt::Image> cam0_prev_img_ptr;
-        boost::shared_ptr<mynt::Image> cam0_curr_img_ptr;
-        boost::shared_ptr<mynt::Image> cam1_curr_img_ptr;
+        std::shared_ptr<cg::Image> cam0_prev_img_ptr;
+        std::shared_ptr<cg::Image> cam0_curr_img_ptr;
+        std::shared_ptr<cg::Image> cam1_curr_img_ptr;
 
         // Pyramids for previous and current image
-        std::vector<cv::Mat> prev_cam0_pyramid_;
-        std::vector<cv::Mat> curr_cam0_pyramid_;
-        std::vector<cv::Mat> curr_cam1_pyramid_;
+        std::vector<cg::YImg8> prev_cam0_pyramid_;
+        std::vector<cg::YImg8> curr_cam0_pyramid_;
+        std::vector<cg::YImg8> curr_cam1_pyramid_;
 
         // Features in the previous and current image.
-        boost::shared_ptr<GridFeatures> prev_features_ptr;
-        boost::shared_ptr<GridFeatures> curr_features_ptr;
+        std::shared_ptr<GridFeatures> prev_features_ptr;
+        std::shared_ptr<GridFeatures> curr_features_ptr;
 
         // Number of features after each outlier removal step.
-        int before_tracking;
-        int after_tracking;
-        int after_matching;
-        int after_ransac;
+        int before_tracking = 0;
+        int after_tracking = 0;
+        int after_matching = 0;
+        int after_ransac = 0;
 
         // Debugging
         std::map<FeatureIDType, int> feature_lifetime;
+
+        std::ofstream debug_;
 
         void updateFeatureLifetime();
 
