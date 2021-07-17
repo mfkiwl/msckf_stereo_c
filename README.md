@@ -1,6 +1,6 @@
-# msckf_stereo_c
+# Stereo MSCKF in C
 
-modified version of msckf_vio
+Stereo MSCKF based on MSCKF_VIO without ROS and 3rd Parties like Eigen, OpenCV, PCL, etc. 
 
 -----
 
