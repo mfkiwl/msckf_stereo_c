@@ -18,7 +18,7 @@
 #include "kinematics/quarternion.h"
 #include "kinematics/transform.h"
 
-namespace mynt {
+namespace cg {
 /*
  * @brief CAMState Stored camera state in order to form measurement model.
  */
@@ -33,21 +33,21 @@ struct CAMState {
 
   // Orientation
   // Take a vector from the world frame to the camera frame.
-  mynt::Quarternion orientation;
+  cg::Quarternion orientation;
 
   // Position of the camera frame in the world frame.
-  mynt::Vector3 position;
+  cg::Vector3 position;
 
   // These two variables should have the same physical
   // interpretation with `orientation` and `position`.
   // There two variables are used to modify the measurement
   // Jacobian matrices to make the observability matrix
   // have proper null space.
-  mynt::Quarternion orientation_null;
-  mynt::Vector3 position_null;
+  cg::Quarternion orientation_null;
+  cg::Vector3 position_null;
 
   // Takes a vector from the cam0 frame to the cam1 frame.
-  static mynt::EuclideanTransform T_cam0_cam1;
+  static cg::EuclideanTransform T_cam0_cam1;
 
   CAMState(): id(0), time(0) {}
 

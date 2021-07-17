@@ -23,7 +23,7 @@
 #include "common/cam_state.h"
 #include "feature.hpp"
 
-namespace mynt {
+namespace cg {
 /*
  * @brief MsckfVio Implements the algorithm in
  *    Anatasios I. Mourikis, and Stergios I. Roumeliotis,
@@ -66,7 +66,7 @@ class MsckfVio {
      *    Callback function for the imu message.
      * @param msg IMU msg.
      */
-    void imuCallback(const mynt::ImuConstPtr &msg);
+    void imuCallback(const cg::ImuConstPtr &msg);
 
     /*
      * @brief featureCallback
@@ -75,9 +75,9 @@ class MsckfVio {
      */
     void featureCallback(const CameraMeasurementConstPtr& msg);
 
-    std::vector<mynt::Vector3> get_path() {return path_;}
+    std::vector<cg::Vector3> get_path() {return path_;}
 
-    std::vector<mynt::Point3f> get_points3d() {return points3d_;}
+    std::vector<cg::Point3f> get_points3d() {return points3d_;}
 
     typedef std::shared_ptr<MsckfVio> Ptr;
     typedef std::shared_ptr<const MsckfVio> ConstPtr;
@@ -93,9 +93,9 @@ class MsckfVio {
       CamStateServer cam_states;
 
       // State covariance matrix
-      mynt::Matrix state_cov;
-      mynt::Matrix continuous_noise_cov;
-      StateServer() : continuous_noise_cov(mynt::Matrix(12,12)) {}
+      cg::Matrix state_cov;
+      cg::Matrix continuous_noise_cov;
+      StateServer() : continuous_noise_cov(cg::Matrix(12,12)) {}
     };
 
     /*
@@ -120,8 +120,8 @@ class MsckfVio {
     // Filter related functions
     // Propogate the state
     void batchImuProcessing(const double& time_bound);
-    void processModel(const double& time, const mynt::Vector3& m_gyro, const mynt::Vector3& m_acc);
-    void predictNewState(const double& dt, const mynt::Vector3& gyro, const mynt::Vector3& acc);
+    void processModel(const double& time, const cg::Vector3& m_gyro, const cg::Vector3& m_acc);
+    void predictNewState(const double& dt, const cg::Vector3& gyro, const cg::Vector3& acc);
 
     // Measurement update
     void stateAugmentation(const double& time);
@@ -129,12 +129,12 @@ class MsckfVio {
     // This function is used to compute the measurement Jacobian
     // for a single feature observed at a single camera frame.
     // H_x 4x6, H_f 4x3
-    void measurementJacobian(const StateIDType& cam_state_id, const FeatureIDType& feature_id, mynt::Matrix& H_x, mynt::Matrix& H_f, mynt::Vector4& r);
+    void measurementJacobian(const StateIDType& cam_state_id, const FeatureIDType& feature_id, cg::Matrix& H_x, cg::Matrix& H_f, cg::Vector4& r);
     // This function computes the Jacobian of all measurements viewed
     // in the given camera states of this feature.
-    void featureJacobian(const FeatureIDType& feature_id, const std::vector<StateIDType>& cam_state_ids, mynt::Matrix &H_x, mynt::VectorX &r);
-    void measurementUpdate(const mynt::Matrix &H, const mynt::VectorX &r);
-    bool gatingTest(const mynt::Matrix& H, const mynt::VectorX&r, const int& dof);
+    void featureJacobian(const FeatureIDType& feature_id, const std::vector<StateIDType>& cam_state_ids, cg::Matrix &H_x, cg::VectorX &r);
+    void measurementUpdate(const cg::Matrix &H, const cg::VectorX &r);
+    bool gatingTest(const cg::Matrix& H, const cg::VectorX&r, const int& dof);
     void removeLostFeatures();
     void findRedundantCamStates(std::vector<StateIDType>& rm_cam_state_ids);
     void pruneCamStateBuffer();
@@ -143,8 +143,8 @@ class MsckfVio {
 
     YAML::Node cfg_cam_imu_;
 
-    std::vector<mynt::Vector3> path_;
-    std::vector<mynt::Point3f> points3d_;
+    std::vector<cg::Vector3> path_;
+    std::vector<cg::Point3f> points3d_;
 
     // Chi squared test table.
     static std::map<int, double> chi_squared_test_table;
@@ -160,7 +160,7 @@ class MsckfVio {
     // IMU data buffer
     // This is buffer is used to handle the unsynchronization or
     // transfer delay between IMU and Image messages.
-    std::vector<mynt::Imu> imu_msg_buffer;
+    std::vector<cg::Imu> imu_msg_buffer;
 
     // Indicate if the gravity vector is set.
     bool is_gravity_set;

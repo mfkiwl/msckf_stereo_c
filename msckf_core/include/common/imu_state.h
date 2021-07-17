@@ -20,7 +20,7 @@
 
 #define GRAVITY_ACCELERATION 9.81
 
-namespace mynt {
+namespace cg {
 
 /*
  * @brief IMUState State for IMU
@@ -40,30 +40,30 @@ struct IMUState {
 
   // Orientation
   // Take a vector from the world frame to the IMU (body) frame.
-  mynt::Quarternion orientation;
+  cg::Quarternion orientation;
 
   // Position of the IMU (body) frame in the world frame.
-  mynt::Vector3 position;
+  cg::Vector3 position;
 
   // Velocity of the IMU (body) frame in the world frame.
-  mynt::Vector3 velocity;
+  cg::Vector3 velocity;
 
   // Bias for measured angular velocity and acceleration.
-  mynt::Vector3 gyro_bias;
-  mynt::Vector3 acc_bias;
+  cg::Vector3 gyro_bias;
+  cg::Vector3 acc_bias;
 
   // Transformation between the IMU and the left camera (cam0)
-  mynt::RotationMatrix R_imu_cam0;
-  mynt::Vector3 t_cam0_imu;
+  cg::RotationMatrix R_imu_cam0;
+  cg::Vector3 t_cam0_imu;
 
   // These three variables should have the same physical
   // interpretation with `orientation`, `position`, and
   // `velocity`. There three variables are used to modify
   // the transition matrices to make the observability matrix
   // have proper null space.
-  mynt::Quarternion orientation_null;
-  mynt::Vector3 position_null;
-  mynt::Vector3 velocity_null;
+  cg::Quarternion orientation_null;
+  cg::Vector3 position_null;
+  cg::Vector3 velocity_null;
 
   // Process noise
   static double gyro_noise;
@@ -72,14 +72,14 @@ struct IMUState {
   static double acc_bias_noise;
 
   // Gravity vector in the world frame
-  static mynt::Vector3 gravity;
+  static cg::Vector3 gravity;
 
   // Transformation offset from the IMU frame to
   // the body frame. The transformation takes a
   // vector from the IMU frame to the body frame.
   // The z axis of the body frame should point upwards.
   // Normally, this transform should be identity.
-  static mynt::EuclideanTransform T_imu_body;
+  static cg::EuclideanTransform T_imu_body;
 
   IMUState(): id(0), time(0) {}
 

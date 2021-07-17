@@ -20,17 +20,17 @@ using namespace pangolin;
 
 #include "glwindow/scenewindow.hpp"
 
-mynt::SystemPtr system_ptr;
+cg::SystemPtr system_ptr;
 
 typedef unsigned long long int FeatureIDType;
 
 void draw_features_stereo(
-        mynt::YImg8 img_cam0, mynt::YImg8 img_cam1,
+        cg::YImg8 img_cam0, cg::YImg8 img_cam1,
         std::vector<FeatureIDType> prev_ids,
-        std::map<FeatureIDType, mynt::Point2f> prev_cam0_points,
-        std::map<FeatureIDType, mynt::Point2f> prev_cam1_points,
-        std::map<FeatureIDType, mynt::Point2f> curr_cam0_points,
-        std::map<FeatureIDType, mynt::Point2f> curr_cam1_points,
+        std::map<FeatureIDType, cg::Point2f> prev_cam0_points,
+        std::map<FeatureIDType, cg::Point2f> prev_cam1_points,
+        std::map<FeatureIDType, cg::Point2f> curr_cam0_points,
+        std::map<FeatureIDType, cg::Point2f> curr_cam1_points,
         int grid_row, int grid_col
 ) {
 
@@ -95,8 +95,8 @@ void draw_features_stereo(
 
     // Draw new features.
     for (const auto &new_cam0_point : curr_cam0_points) {
-        mynt::Point2f pt00 = new_cam0_point.second;
-        mynt::Point2f pt01 = curr_cam1_points[new_cam0_point.first];
+        cg::Point2f pt00 = new_cam0_point.second;
+        cg::Point2f pt01 = curr_cam1_points[new_cam0_point.first];
 
         cv::Point2f pt0 = cv::Point2f(pt00.x, pt00.y);
         cv::Point2f pt1 = cv::Point2f(pt01.x+img_width, pt01.y);
@@ -113,15 +113,20 @@ void draw_features_stereo(
     return;
 }
 
-int main() {
-    std::cout << "start run_euroc..." << std::endl;
-
+int main(int argc, char *argv[]) {
+    if(argc !=2) {
+        std::cout << "Arguments ERROR!" << std::endl;
+        std::cout << "Usage: run_xxx <path-to-euroc-mav0-dir>" << std::endl;
+        return -1;
+    }
+    std::string euroc_dir = argv[1];
     std::string file_cam_imu = "../config/camchain-imucam-euroc.yaml";
-    std::string euroc_dir = "/home/cg/projects/datasets/V1_01_easy/mav0/";
     int num_cams = 2;
     double timestamp_first = 0.0;
 
-    system_ptr.reset(new mynt::System(file_cam_imu));
+    std::cout << "start run_euroc..." << std::endl;
+
+    system_ptr.reset(new cg::System(file_cam_imu));
 
 #if ONLY_GL
     glwindow::SceneWindow scene(640, 480, "Trajectory Viewer GL");
@@ -182,12 +187,12 @@ int main() {
     unsigned int imgs_size = data_img[0].size();
     int idx_img = 0;
     while (idx_img < imgs_size) {
-        mynt::Image imgs[num_cams];
+        cg::Image imgs[num_cams];
         for (int j = 0; j < num_cams; ++j) {
             imgs[j].time_stamp = data_img[j][idx_img].first * 1e-9; // to seconds;
             std::string img_path = euroc_dir + "/cam" + std::to_string(j) + "/data/" + data_img[j][idx_img].second;
             cv::Mat mat_img = cv::imread(img_path, 0);
-            mynt::YImg8 yimg(mat_img.rows, mat_img.cols);
+            cg::YImg8 yimg(mat_img.rows, mat_img.cols);
             memcpy(yimg.data(), mat_img.data, yimg.size().area());
             imgs[j].image = yimg;
             if (imgs[j].image.empty()) {
@@ -209,19 +214,19 @@ int main() {
             std::string nanoseconds = s.substr(s.size() - 9, 9);
             std::string seconds = s.substr(0, s.size() - 9);
             double stamp_ns = std::stoi(seconds) * 1e9 + std::stoi(nanoseconds);
-            mynt::Vector3 gyr;
+            cg::Vector3 gyr;
             for (int j = 0; j < 3; ++j) {
                 std::getline(stream, s, ',');
                 gyr[j] = std::stof(s);
             }
-            mynt::Vector3 acc;
+            cg::Vector3 acc;
             for (int j = 0; j < 3; ++j) {
                 std::getline(stream, s, ',');
                 acc[j] = std::stof(s);
             }
             // std::cout << "imu: " << gyr.transpose() << ", " << acc.transpose() << std::endl;
 
-            std::shared_ptr<mynt::Imu> imu(new mynt::Imu);
+            std::shared_ptr<cg::Imu> imu(new cg::Imu);
             imu->time_stamp = stamp_ns * 1e-9; // to seconds
             imu->angular_velocity = gyr;
             imu->linear_acceleration = acc;

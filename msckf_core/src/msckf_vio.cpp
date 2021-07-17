@@ -28,18 +28,18 @@
 #include "maths/svd_fulluv.h"
 #include "maths/math_basics.h"
 
-namespace mynt {
+namespace cg {
     // Static member variables in IMUState class.
     StateIDType IMUState::next_id = 0;
     double IMUState::gyro_noise = 0.001;
     double IMUState::acc_noise = 0.01;
     double IMUState::gyro_bias_noise = 0.001;
     double IMUState::acc_bias_noise = 0.01;
-    mynt::Vector3 IMUState::gravity = mynt::Vector3({0, 0, -GRAVITY_ACCELERATION});
-    mynt::EuclideanTransform IMUState::T_imu_body = mynt::EuclideanTransform();
+    cg::Vector3 IMUState::gravity = cg::Vector3({0, 0, -GRAVITY_ACCELERATION});
+    cg::EuclideanTransform IMUState::T_imu_body = cg::EuclideanTransform();
 
     // Static member variables in CAMState class.
-    mynt::EuclideanTransform CAMState::T_cam0_cam1 = mynt::EuclideanTransform();
+    cg::EuclideanTransform CAMState::T_cam0_cam1 = cg::EuclideanTransform();
 
     // Static member variables in Feature class.
     FeatureIDType Feature::next_id = 0;
@@ -85,7 +85,7 @@ namespace mynt {
         // implicitly. But the initial velocity and bias can be
         // set by parameters.
         // TODO: is it reasonable to set the initial bias to 0?
-        state_server.imu_state.velocity = cfg_msckfvio["initial_state/velocity"].as<mynt::Vector3>();
+        state_server.imu_state.velocity = cfg_msckfvio["initial_state/velocity"].as<cg::Vector3>();
 
         // The initial covariance of orientation and position can be
         // set to 0. But for velocity, bias and extrinsic parameters,
@@ -99,7 +99,7 @@ namespace mynt {
         extrinsic_rotation_cov = cfg_msckfvio["initial_covariance/extrinsic_rotation_cov"].as<double>();
         extrinsic_translation_cov = cfg_msckfvio["initial_covariance/extrinsic_translation_cov"].as<double>();
 
-        state_server.state_cov = mynt::Matrix(21, 21);
+        state_server.state_cov = cg::Matrix(21, 21);
         for (int i = 3; i < 6; ++i)
             state_server.state_cov(i, i) = gyro_bias_cov;
         for (int i = 6; i < 9; ++i)
@@ -112,16 +112,16 @@ namespace mynt {
             state_server.state_cov(i, i) = extrinsic_translation_cov;
 
         // Transformation offsets between the frames involved.
-        mynt::Matrix m4_cam0_imu = cfg_cam_imu_["cam0"]["T_cam_imu"].as<mynt::Mat4>();
+        cg::Matrix m4_cam0_imu = cfg_cam_imu_["cam0"]["T_cam_imu"].as<cg::Mat4>();
 
-        mynt::EuclideanTransform T_cam0_imu = m4_cam0_imu.inv();
+        cg::EuclideanTransform T_cam0_imu = m4_cam0_imu.inv();
         state_server.imu_state.R_imu_cam0 = T_cam0_imu.rotation_matrix().transpose();
         state_server.imu_state.t_cam0_imu = T_cam0_imu.translation();
 
-        mynt::Matrix m4_cam1_cam0 = cfg_cam_imu_["cam1"]["T_cn_cnm1"].as<mynt::Mat4>();
+        cg::Matrix m4_cam1_cam0 = cfg_cam_imu_["cam1"]["T_cn_cnm1"].as<cg::Mat4>();
         CAMState::T_cam0_cam1 = m4_cam1_cam0; // 坐标系变换
 
-        mynt::Matrix m4_imu_body = cfg_cam_imu_["T_imu_body"].as<mynt::Mat4>();
+        cg::Matrix m4_imu_body = cfg_cam_imu_["T_imu_body"].as<cg::Mat4>();
         IMUState::T_imu_body = m4_imu_body.inv();
 
         // Maximum number of camera states to be stored
@@ -171,23 +171,23 @@ namespace mynt {
         debug_.open("debug_msckfvio.txt");
 
         // Initialize state server
-        state_server.continuous_noise_cov = mynt::Matrix(12, 12);
-        state_server.continuous_noise_cov.set_mat(0, 0, mynt::Matrix::eye(3) * IMUState::gyro_noise);
-        state_server.continuous_noise_cov.set_mat(3, 3, mynt::Matrix::eye(3) * IMUState::gyro_bias_noise);
-        state_server.continuous_noise_cov.set_mat(6, 6, mynt::Matrix::eye(3) * IMUState::acc_noise);
-        state_server.continuous_noise_cov.set_mat(9, 9, mynt::Matrix::eye(3) * IMUState::acc_bias_noise);
+        state_server.continuous_noise_cov = cg::Matrix(12, 12);
+        state_server.continuous_noise_cov.set_mat(0, 0, cg::Matrix::eye(3) * IMUState::gyro_noise);
+        state_server.continuous_noise_cov.set_mat(3, 3, cg::Matrix::eye(3) * IMUState::gyro_bias_noise);
+        state_server.continuous_noise_cov.set_mat(6, 6, cg::Matrix::eye(3) * IMUState::acc_noise);
+        state_server.continuous_noise_cov.set_mat(9, 9, cg::Matrix::eye(3) * IMUState::acc_bias_noise);
 
         // Initialize the chi squared test table with confidence level 0.95.
         for (int i = 1; i < 100; ++i) {
 //            boost::math::chi_squared chi_squared_dist(i);
 //            chi_squared_test_table[i] = boost::math::quantile(chi_squared_dist, 0.05);
-            chi_squared_test_table[i] = mynt::chi_square_table_p95[i-1];
+            chi_squared_test_table[i] = cg::chi_square_table_p95[i-1];
         }
 
         return true;
     }
 
-    void MsckfVio::imuCallback(const mynt::ImuConstPtr &msg) {
+    void MsckfVio::imuCallback(const cg::ImuConstPtr &msg) {
         // IMU msgs are pushed backed into a buffer instead of
         // being processed immediately. The IMU msgs are processed
         // when the next image is available, in which way, we can
@@ -208,12 +208,12 @@ namespace mynt {
 
     void MsckfVio::initializeGravityAndBias() {
         // Initialize gravity and gyro bias.
-        mynt::Vector3 sum_angular_vel;
-        mynt::Vector3 sum_linear_acc;
+        cg::Vector3 sum_angular_vel;
+        cg::Vector3 sum_linear_acc;
 
         for (const auto &imu_msg : imu_msg_buffer) {
-            mynt::Vector3 angular_vel = imu_msg.angular_velocity;
-            mynt::Vector3 linear_acc  = imu_msg.linear_acceleration;
+            cg::Vector3 angular_vel = imu_msg.angular_velocity;
+            cg::Vector3 linear_acc  = imu_msg.linear_acceleration;
 
             sum_angular_vel += angular_vel;
             sum_linear_acc  += linear_acc;
@@ -223,17 +223,17 @@ namespace mynt {
         //IMUState::gravity =
         //  -sum_linear_acc / imu_msg_buffer.size();
         // This is the gravity in the IMU frame.
-        mynt::Vector3 gravity_imu = sum_linear_acc / imu_msg_buffer.size();
+        cg::Vector3 gravity_imu = sum_linear_acc / imu_msg_buffer.size();
 
         // Initialize the initial orientation, so that the estimation
         // is consistent with the inertial frame.
         double gravity_norm = gravity_imu.l2norm();
-        IMUState::gravity = mynt::Vector3({0.0, 0.0, -gravity_norm});
+        IMUState::gravity = cg::Vector3({0.0, 0.0, -gravity_norm});
 
         std::cout << "===g: " << gravity_norm << std::endl;
 
         // TODO: verify
-        state_server.imu_state.orientation = mynt::from_two_vector(gravity_imu, -IMUState::gravity).transpose().quarternion();
+        state_server.imu_state.orientation = cg::from_two_vector(gravity_imu, -IMUState::gravity).transpose().quarternion();
 
         std::cout << "state_server.imu_state.orientation: " << state_server.imu_state.orientation << std::endl;
 
@@ -250,14 +250,14 @@ namespace mynt {
         // Reset the IMU state.
         IMUState &imu_state = state_server.imu_state;
         imu_state.time = 0.0;
-        imu_state.orientation = mynt::Quarternion();
-        imu_state.position = mynt::Vector3();
-        imu_state.velocity = mynt::Vector3();
-        imu_state.gyro_bias = mynt::Vector3();
-        imu_state.acc_bias = mynt::Vector3();
-        imu_state.orientation_null = mynt::Quarternion();
-        imu_state.position_null = mynt::Vector3();
-        imu_state.velocity_null = mynt::Vector3();
+        imu_state.orientation = cg::Quarternion();
+        imu_state.position = cg::Vector3();
+        imu_state.velocity = cg::Vector3();
+        imu_state.gyro_bias = cg::Vector3();
+        imu_state.acc_bias = cg::Vector3();
+        imu_state.orientation_null = cg::Quarternion();
+        imu_state.position_null = cg::Vector3();
+        imu_state.velocity_null = cg::Vector3();
 
         // Remove all existing camera states.
         state_server.cam_states.clear();
@@ -272,7 +272,7 @@ namespace mynt {
         extrinsic_rotation_cov = cfg_msckfvio["initial_covariance/extrinsic_rotation_cov"].as<double>();
         extrinsic_translation_cov = cfg_msckfvio["initial_covariance/extrinsic_translation_cov"].as<double>();
 
-        state_server.state_cov = mynt::Matrix(21, 21);
+        state_server.state_cov = cg::Matrix(21, 21);
         for (int i = 3; i < 6; ++i)
             state_server.state_cov(i, i) = gyro_bias_cov;
         for (int i = 6; i < 9; ++i)
@@ -388,7 +388,7 @@ namespace mynt {
                 break;
 
             // Convert the msgs.
-            mynt::Vector3 m_gyro, m_acc;
+            cg::Vector3 m_gyro, m_acc;
             m_gyro = imu_msg.angular_velocity;
             m_acc  = imu_msg.linear_acceleration;
 
@@ -406,56 +406,56 @@ namespace mynt {
         return;
     }
 
-    void MsckfVio::processModel(const double &time, const mynt::Vector3 &m_gyro, const mynt::Vector3 &m_acc) {
+    void MsckfVio::processModel(const double &time, const cg::Vector3 &m_gyro, const cg::Vector3 &m_acc) {
         // Remove the bias from the measured gyro and acceleration
         IMUState &imu_state = state_server.imu_state;
-        mynt::Vector3 gyro = m_gyro - imu_state.gyro_bias;
-        mynt::Vector3 acc  = m_acc -  imu_state.acc_bias;
+        cg::Vector3 gyro = m_gyro - imu_state.gyro_bias;
+        cg::Vector3 acc  = m_acc -  imu_state.acc_bias;
         double dtime = time - imu_state.time;
 
         // Compute discrete transition and noise covariance matrix
-        mynt::Matrix F(21, 21);
-        mynt::Matrix G(21, 12);
+        cg::Matrix F(21, 21);
+        cg::Matrix G(21, 12);
 
-        F.set_mat(0,  0, -mynt::skew_symmetric(gyro));
-        F.set_mat(0,  3, -mynt::Matrix::eye(3));
-        F.set_mat(6,  0, -imu_state.orientation.rotation_matrix().transpose() * mynt::skew_symmetric(acc));
+        F.set_mat(0,  0, -cg::skew_symmetric(gyro));
+        F.set_mat(0,  3, -cg::Matrix::eye(3));
+        F.set_mat(6,  0, -imu_state.orientation.rotation_matrix().transpose() * cg::skew_symmetric(acc));
         F.set_mat(6,  9, -imu_state.orientation.rotation_matrix().transpose());
-        F.set_mat(12, 6,  mynt::Matrix::eye(3));
+        F.set_mat(12, 6,  cg::Matrix::eye(3));
 
-        G.set_mat(0, 0, -mynt::Matrix::eye(3));
-        G.set_mat(3, 3,  mynt::Matrix::eye(3));
+        G.set_mat(0, 0, -cg::Matrix::eye(3));
+        G.set_mat(3, 3,  cg::Matrix::eye(3));
         G.set_mat(6, 6, -imu_state.orientation.rotation_matrix().transpose());
-        G.set_mat(9, 9,  mynt::Matrix::eye(3));
+        G.set_mat(9, 9,  cg::Matrix::eye(3));
 
         // Approximate matrix exponential to the 3rd order,
         // which can be considered to be accurate enough assuming dtime is within 0.01s.
-        mynt::Matrix Fdt = F * dtime;
-        mynt::Matrix Fdt_square = Fdt * Fdt;
-        mynt::Matrix Fdt_cube = Fdt_square * Fdt;
-        mynt::Matrix Phi = mynt::Matrix::eye(21) + Fdt + 0.5 * Fdt_square + (1.0 / 6.0) * Fdt_cube;
+        cg::Matrix Fdt = F * dtime;
+        cg::Matrix Fdt_square = Fdt * Fdt;
+        cg::Matrix Fdt_cube = Fdt_square * Fdt;
+        cg::Matrix Phi = cg::Matrix::eye(21) + Fdt + 0.5 * Fdt_square + (1.0 / 6.0) * Fdt_cube;
 
         // Propogate the state using 4th order Runge-Kutta
         predictNewState(dtime, gyro, acc);
 
         // Modify the transition matrix
-        mynt::RotationMatrix R_kk_1 = imu_state.orientation_null.rotation_matrix();
+        cg::RotationMatrix R_kk_1 = imu_state.orientation_null.rotation_matrix();
         Phi.set_mat(0, 0, imu_state.orientation.rotation_matrix() * R_kk_1.transpose());
 
-        mynt::Vector3 u = R_kk_1 * IMUState::gravity;
-        mynt::Vector3 s = (1.0 / u.dot(u)) * u;
+        cg::Vector3 u = R_kk_1 * IMUState::gravity;
+        cg::Vector3 s = (1.0 / u.dot(u)) * u;
 
-//        mynt::Matrix A1 = Phi.block<3, 3>(6, 0);
-        mynt::Matrix A1 = Phi.block<3, 3>(6, 0);
-        mynt::Vector3 w1 = mynt::skew_symmetric(imu_state.velocity_null - imu_state.velocity) * IMUState::gravity;
+//        cg::Matrix A1 = Phi.block<3, 3>(6, 0);
+        cg::Matrix A1 = Phi.block<3, 3>(6, 0);
+        cg::Vector3 w1 = cg::skew_symmetric(imu_state.velocity_null - imu_state.velocity) * IMUState::gravity;
         Phi.set_mat(6, 0, A1 - (A1 * u - w1) * s.transpose());
 
-        mynt::Matrix A2 = Phi.block<3, 3>(12, 0);
-        mynt::Vector3 w2 = mynt::skew_symmetric(dtime * imu_state.velocity_null + imu_state.position_null - imu_state.position) * IMUState::gravity;
+        cg::Matrix A2 = Phi.block<3, 3>(12, 0);
+        cg::Vector3 w2 = cg::skew_symmetric(dtime * imu_state.velocity_null + imu_state.position_null - imu_state.position) * IMUState::gravity;
         Phi.set_mat(12, 0, A2 - (A2 * u - w2) * s.transpose());
 
         // Propogate the state covariance matrix.
-        mynt::Matrix Q = Phi * G * state_server.continuous_noise_cov * G.transpose() * Phi.transpose() * dtime;
+        cg::Matrix Q = Phi * G * state_server.continuous_noise_cov * G.transpose() * Phi.transpose() * dtime;
         state_server.state_cov.set_mat(0, 0, Phi * state_server.state_cov.block<21, 21>(0, 0) * Phi.transpose() + Q);
 
         if (state_server.cam_states.size() > 0) {
@@ -465,7 +465,7 @@ namespace mynt {
                     state_server.state_cov.block(21, 0, state_server.state_cov.rows() - 21, 21) * Phi.transpose());
         }
 
-        mynt::Matrix state_cov_fixed = (state_server.state_cov + state_server.state_cov.transpose()) * 0.5;
+        cg::Matrix state_cov_fixed = (state_server.state_cov + state_server.state_cov.transpose()) * 0.5;
         state_server.state_cov = state_cov_fixed;
 
         // Update the state correspondes to null space.
@@ -479,48 +479,48 @@ namespace mynt {
         return;
     }
 
-    void MsckfVio::predictNewState(const double &dt, const mynt::Vector3 &gyro, const mynt::Vector3 &acc) {
+    void MsckfVio::predictNewState(const double &dt, const cg::Vector3 &gyro, const cg::Vector3 &acc) {
         // TODO: Will performing the forward integration using the inverse of the quaternion give better accuracy?
         double gyro_norm = gyro.l2norm();
-        mynt::Matrix Omega(4, 4);
-        Omega.set_mat(0, 0, -mynt::skew_symmetric(gyro));
+        cg::Matrix Omega(4, 4);
+        Omega.set_mat(0, 0, -cg::skew_symmetric(gyro));
         Omega.set_mat(0, 3,  gyro);
         Omega.set_mat(3, 0, -gyro.transpose());
 
-        mynt::Quarternion &q = state_server.imu_state.orientation;
-        mynt::Vector3 &v = state_server.imu_state.velocity;
-        mynt::Vector3 &p = state_server.imu_state.position;
+        cg::Quarternion &q = state_server.imu_state.orientation;
+        cg::Vector3 &v = state_server.imu_state.velocity;
+        cg::Vector3 &p = state_server.imu_state.position;
 
         // Some pre-calculation
-        mynt::Quarternion dq_dt, dq_dt2;
+        cg::Quarternion dq_dt, dq_dt2;
         if (gyro_norm > 1e-5) {
-            dq_dt  = mynt::Vector4((cos(gyro_norm * dt * 0.5)  * mynt::Matrix::eye(4) + 1 / gyro_norm * sin(gyro_norm * dt * 0.5)  * Omega) * q.vector4());
-            dq_dt2 = mynt::Vector4((cos(gyro_norm * dt * 0.25) * mynt::Matrix::eye(4) + 1 / gyro_norm * sin(gyro_norm * dt * 0.25) * Omega) * q.vector4());
+            dq_dt  = cg::Vector4((cos(gyro_norm * dt * 0.5)  * cg::Matrix::eye(4) + 1 / gyro_norm * sin(gyro_norm * dt * 0.5)  * Omega) * q.vector4());
+            dq_dt2 = cg::Vector4((cos(gyro_norm * dt * 0.25) * cg::Matrix::eye(4) + 1 / gyro_norm * sin(gyro_norm * dt * 0.25) * Omega) * q.vector4());
         } else {
-            dq_dt  = mynt::Vector4((mynt::Matrix::eye(4) + 0.5  * dt * Omega) * cos(gyro_norm * dt * 0.5)  * q.vector4());
-            dq_dt2 = mynt::Vector4((mynt::Matrix::eye(4) + 0.25 * dt * Omega) * cos(gyro_norm * dt * 0.25) * q.vector4());
+            dq_dt  = cg::Vector4((cg::Matrix::eye(4) + 0.5  * dt * Omega) * cos(gyro_norm * dt * 0.5)  * q.vector4());
+            dq_dt2 = cg::Vector4((cg::Matrix::eye(4) + 0.25 * dt * Omega) * cos(gyro_norm * dt * 0.25) * q.vector4());
         }
-        mynt::RotationMatrix dR_dt_transpose  =  dq_dt.rotation_matrix().transpose();
-        mynt::RotationMatrix dR_dt2_transpose = dq_dt2.rotation_matrix().transpose();
+        cg::RotationMatrix dR_dt_transpose  =  dq_dt.rotation_matrix().transpose();
+        cg::RotationMatrix dR_dt2_transpose = dq_dt2.rotation_matrix().transpose();
 
         // k1 = f(tn, yn)
-        mynt::Vector3 k1_v_dot = q.rotation_matrix().transpose() * acc + IMUState::gravity;
-        mynt::Vector3 k1_p_dot = v;
+        cg::Vector3 k1_v_dot = q.rotation_matrix().transpose() * acc + IMUState::gravity;
+        cg::Vector3 k1_p_dot = v;
 
         // k2 = f(tn+dt/2, yn+k1*dt/2)
-        mynt::Vector3 k1_v = v + k1_v_dot * dt / 2;
-        mynt::Vector3 k2_v_dot = dR_dt2_transpose * acc + IMUState::gravity;
-        mynt::Vector3 k2_p_dot = k1_v;
+        cg::Vector3 k1_v = v + k1_v_dot * dt / 2;
+        cg::Vector3 k2_v_dot = dR_dt2_transpose * acc + IMUState::gravity;
+        cg::Vector3 k2_p_dot = k1_v;
 
         // k3 = f(tn+dt/2, yn+k2*dt/2)
-        mynt::Vector3 k2_v = v + k2_v_dot * dt / 2;
-        mynt::Vector3 k3_v_dot = dR_dt2_transpose * acc + IMUState::gravity;
-        mynt::Vector3 k3_p_dot = k2_v;
+        cg::Vector3 k2_v = v + k2_v_dot * dt / 2;
+        cg::Vector3 k3_v_dot = dR_dt2_transpose * acc + IMUState::gravity;
+        cg::Vector3 k3_p_dot = k2_v;
 
         // k4 = f(tn+dt, yn+k3*dt)
-        mynt::Vector3 k3_v = v + k3_v_dot * dt;
-        mynt::Vector3 k4_v_dot = dR_dt_transpose * acc + IMUState::gravity;
-        mynt::Vector3 k4_p_dot = k3_v;
+        cg::Vector3 k3_v = v + k3_v_dot * dt;
+        cg::Vector3 k4_v_dot = dR_dt_transpose * acc + IMUState::gravity;
+        cg::Vector3 k4_p_dot = k3_v;
 
         // yn+1 = yn + dt/6*(k1+2*k2+2*k3+k4)
         q = dq_dt.normalized();
@@ -531,13 +531,13 @@ namespace mynt {
     }
 
     void MsckfVio::stateAugmentation(const double &time) {
-        const mynt::RotationMatrix &R_i_c = state_server.imu_state.R_imu_cam0;
-        const mynt::Vector3 &t_c_i = state_server.imu_state.t_cam0_imu;
+        const cg::RotationMatrix &R_i_c = state_server.imu_state.R_imu_cam0;
+        const cg::Vector3 &t_c_i = state_server.imu_state.t_cam0_imu;
 
         // Add a new camera state to the state server.
-        mynt::RotationMatrix R_w_i = state_server.imu_state.orientation.rotation_matrix();
-        mynt::RotationMatrix R_w_c = R_i_c * R_w_i;
-        mynt::Vector3 t_c_w = state_server.imu_state.position + R_w_i.transpose() * t_c_i;
+        cg::RotationMatrix R_w_i = state_server.imu_state.orientation.rotation_matrix();
+        cg::RotationMatrix R_w_c = R_i_c * R_w_i;
+        cg::Vector3 t_c_w = state_server.imu_state.position + R_w_i.transpose() * t_c_i;
 
         state_server.cam_states[state_server.imu_state.id] = CAMState(state_server.imu_state.id);
         CAMState &cam_state = state_server.cam_states[state_server.imu_state.id];
@@ -553,13 +553,13 @@ namespace mynt {
         // To simplify computation, the matrix J below is the nontrivial block
         // in Equation (16) in "A Multi-State Constraint Kalman Filter for Vision
         // -aided Inertial Navigation".
-        mynt::Matrix J(6,21);
+        cg::Matrix J(6,21);
         J.set_mat(0, 0, R_i_c);
-        J.set_mat(0, 15, mynt::Matrix::eye(3));
-        J.set_mat(3, 0,  mynt::skew_symmetric(R_w_i.transpose() * t_c_i));
+        J.set_mat(0, 15, cg::Matrix::eye(3));
+        J.set_mat(3, 0,  cg::skew_symmetric(R_w_i.transpose() * t_c_i));
         //J.block<3, 3>(3, 0) = -R_w_i.transpose()*skewSymmetric(t_c_i);
-        J.set_mat(3, 12, mynt::Matrix::eye(3));
-        J.set_mat(3, 18, mynt::Matrix::eye(3));
+        J.set_mat(3, 12, cg::Matrix::eye(3));
+        J.set_mat(3, 18, cg::Matrix::eye(3));
 
         // Resize the state covariance matrix.
         size_t old_rows = state_server.state_cov.rows();
@@ -567,8 +567,8 @@ namespace mynt {
         state_server.state_cov.conservative_resize(old_rows + 6, old_cols + 6);
 
         // Rename some matrix blocks for convenience.
-        const mynt::Matrix &P11 = state_server.state_cov.block<21, 21>(0, 0);
-        const mynt::Matrix &P12 = state_server.state_cov.block(0, 21, 21, old_cols - 21);
+        const cg::Matrix &P11 = state_server.state_cov.block<21, 21>(0, 0);
+        const cg::Matrix &P12 = state_server.state_cov.block(0, 21, 21, old_cols - 21);
 
         // Fill in the augmented state covariance.
 //        state_server.state_cov.block(old_rows, 0, 6, old_cols) << J * P11, J * P12;
@@ -578,7 +578,7 @@ namespace mynt {
         state_server.state_cov.set_mat(old_rows, old_cols, J * P11 * J.transpose());
 
         // Fix the covariance to be symmetric
-        mynt::Matrix state_cov_fixed = (state_server.state_cov + state_server.state_cov.transpose()) / 2.0;
+        cg::Matrix state_cov_fixed = (state_server.state_cov + state_server.state_cov.transpose()) / 2.0;
         state_server.state_cov = state_cov_fixed;
 
         return;
@@ -594,10 +594,10 @@ namespace mynt {
             if (map_server.find(feature.id) == map_server.end()) {
                 // This is a new feature.
                 map_server[feature.id] = Feature(feature.id);
-                map_server[feature.id].observations[state_id] = mynt::Vector4({feature.u0, feature.v0, feature.u1, feature.v1});
+                map_server[feature.id].observations[state_id] = cg::Vector4({feature.u0, feature.v0, feature.u1, feature.v1});
             } else {
                 // This is an old feature.
-                map_server[feature.id].observations[state_id] = mynt::Vector4({feature.u0, feature.v0, feature.u1, feature.v1});
+                map_server[feature.id].observations[state_id] = cg::Vector4({feature.u0, feature.v0, feature.u1, feature.v1});
                 ++tracked_feature_num;
             }
         }
@@ -609,76 +609,76 @@ namespace mynt {
 
     void MsckfVio::measurementJacobian(
             const StateIDType &cam_state_id, const FeatureIDType &feature_id,
-            mynt::Matrix& H_x, mynt::Matrix& H_f, mynt::Vector4 &r) {
+            cg::Matrix& H_x, cg::Matrix& H_f, cg::Vector4 &r) {
 
         // Prepare all the required data.
         const CAMState &cam_state = state_server.cam_states[cam_state_id];
         const Feature &feature = map_server[feature_id];
 
         // Cam0 pose.
-        mynt::RotationMatrix R_w_c0 = cam_state.orientation.rotation_matrix();
-        const mynt::Vector3 &t_c0_w = cam_state.position;
+        cg::RotationMatrix R_w_c0 = cam_state.orientation.rotation_matrix();
+        const cg::Vector3 &t_c0_w = cam_state.position;
 
         // Cam1 pose.
-        mynt::RotationMatrix R_c0_c1 = CAMState::T_cam0_cam1.rotation_matrix();
-        mynt::RotationMatrix R_w_c1  = CAMState::T_cam0_cam1.rotation_matrix() * R_w_c0;
-        mynt::Vector3 t_c1_w = t_c0_w - R_w_c1.transpose() * CAMState::T_cam0_cam1.translation();
+        cg::RotationMatrix R_c0_c1 = CAMState::T_cam0_cam1.rotation_matrix();
+        cg::RotationMatrix R_w_c1  = CAMState::T_cam0_cam1.rotation_matrix() * R_w_c0;
+        cg::Vector3 t_c1_w = t_c0_w - R_w_c1.transpose() * CAMState::T_cam0_cam1.translation();
 
         // 3d feature position in the world frame.
         // And its observation with the stereo cameras.
-        const mynt::Vector3 &p_w = feature.position;
-        const mynt::Vector4 &z = feature.observations.find(cam_state_id)->second;
+        const cg::Vector3 &p_w = feature.position;
+        const cg::Vector4 &z = feature.observations.find(cam_state_id)->second;
 
         // Convert the feature position from the world frame to
         // the cam0 and cam1 frame.
-        mynt::Vector3 p_c0 = R_w_c0 * (p_w - t_c0_w);
-        mynt::Vector3 p_c1 = R_w_c1 * (p_w - t_c1_w);
+        cg::Vector3 p_c0 = R_w_c0 * (p_w - t_c0_w);
+        cg::Vector3 p_c1 = R_w_c1 * (p_w - t_c1_w);
 
         // Compute the Jacobians.
-        mynt::Matrix dz_dpc0(4,3);
+        cg::Matrix dz_dpc0(4,3);
         dz_dpc0(0, 0) = 1 / p_c0[2];
         dz_dpc0(1, 1) = 1 / p_c0[2];
         dz_dpc0(0, 2) = -p_c0[0] / (p_c0[2] * p_c0[2]);
         dz_dpc0(1, 2) = -p_c0[1] / (p_c0[2] * p_c0[2]);
 
-        mynt::Matrix dz_dpc1(4,3);
+        cg::Matrix dz_dpc1(4,3);
         dz_dpc1(2, 0) = 1 / p_c1[2];
         dz_dpc1(3, 1) = 1 / p_c1[2];
         dz_dpc1(2, 2) = -p_c1[0] / (p_c1[2] * p_c1[2]);
         dz_dpc1(3, 2) = -p_c1[1] / (p_c1[2] * p_c1[2]);
 
-        mynt::Matrix dpc0_dxc(3,6);
-        dpc0_dxc.set_mat(0, 0, mynt::skew_symmetric(p_c0));
+        cg::Matrix dpc0_dxc(3,6);
+        dpc0_dxc.set_mat(0, 0, cg::skew_symmetric(p_c0));
         dpc0_dxc.set_mat(0, 3, -R_w_c0);
 
-        mynt::Matrix dpc1_dxc(3,6);
-        dpc1_dxc.set_mat(0, 0, R_c0_c1 * mynt::skew_symmetric(p_c0));
+        cg::Matrix dpc1_dxc(3,6);
+        dpc1_dxc.set_mat(0, 0, R_c0_c1 * cg::skew_symmetric(p_c0));
         dpc1_dxc.set_mat(0, 3, -R_w_c1);
 
-        mynt::RotationMatrix dpc0_dpg = R_w_c0;
-        mynt::RotationMatrix dpc1_dpg = R_w_c1;
+        cg::RotationMatrix dpc0_dpg = R_w_c0;
+        cg::RotationMatrix dpc1_dpg = R_w_c1;
 
         H_x = dz_dpc0 * dpc0_dxc + dz_dpc1 * dpc1_dxc;
         H_f = dz_dpc0 * dpc0_dpg + dz_dpc1 * dpc1_dpg;
 
         // Modifty the measurement Jacobian to ensure
         // observability constrain.
-        mynt::Matrix A = H_x;
-        mynt::Matrix u(6,1);
+        cg::Matrix A = H_x;
+        cg::Matrix u(6,1);
         u.set_mat(0, 0, cam_state.orientation_null.rotation_matrix() * IMUState::gravity);
-        u.set_mat(3, 0, mynt::skew_symmetric(p_w - cam_state.position_null) * IMUState::gravity);
+        u.set_mat(3, 0, cg::skew_symmetric(p_w - cam_state.position_null) * IMUState::gravity);
         H_x = A - A * u * (u.transpose() * u).inv() * u.transpose();
-        H_f = -const_cast<const mynt::Matrix&>(H_x).block<4, 3>(0, 3);
+        H_f = -const_cast<const cg::Matrix&>(H_x).block<4, 3>(0, 3);
 
         // Compute the residual.
-        r = z - mynt::Vector4({p_c0[0] / p_c0[2], p_c0[1] / p_c0[2], p_c1[0] / p_c1[2], p_c1[1] / p_c1[2]});
+        r = z - cg::Vector4({p_c0[0] / p_c0[2], p_c0[1] / p_c0[2], p_c1[0] / p_c1[2], p_c1[1] / p_c1[2]});
 
         return;
     }
 
     void MsckfVio::featureJacobian(
             const FeatureIDType &feature_id, const std::vector<StateIDType> &cam_state_ids,
-            mynt::Matrix &H_x, mynt::VectorX &r) {
+            cg::Matrix &H_x, cg::VectorX &r) {
 
         const auto &feature = map_server[feature_id];
 
@@ -695,15 +695,15 @@ namespace mynt {
         int jacobian_row_size = 0;
         jacobian_row_size = 4 * valid_cam_state_ids.size();
 
-        mynt::Matrix H_xj(jacobian_row_size, 21 + state_server.cam_states.size() * 6);
-        mynt::Matrix H_fj(jacobian_row_size, 3);
-        mynt::VectorX r_j(jacobian_row_size);
+        cg::Matrix H_xj(jacobian_row_size, 21 + state_server.cam_states.size() * 6);
+        cg::Matrix H_fj(jacobian_row_size, 3);
+        cg::VectorX r_j(jacobian_row_size);
         int stack_cntr = 0;
 
         for (const auto &cam_id : valid_cam_state_ids) {
-            mynt::Matrix H_xi(4,6);
-            mynt::Matrix H_fi(4,3);
-            mynt::Vector4 r_i;
+            cg::Matrix H_xi(4,6);
+            cg::Matrix H_fi(4,3);
+            cg::Vector4 r_i;
             measurementJacobian(cam_id, feature.id, H_xi, H_fi, r_i);
 
                 auto cam_state_iter = state_server.cam_states.find(cam_id);
@@ -735,7 +735,7 @@ namespace mynt {
 //        Eigen::JacobiSVD<Eigen::MatrixXd> svd_helper(eH_fj, Eigen::ComputeFullU | Eigen::ComputeThinV);
 //        Eigen::MatrixXd eA = svd_helper.matrixU().rightCols(jacobian_row_size - 3);
 //
-//        mynt::Matrix A(eA.rows(), eA.cols());
+//        cg::Matrix A(eA.rows(), eA.cols());
 //        for(int i=0; i<eA.rows(); ++i)
 //            for(int j=0; j<eA.cols(); ++j)
 //                A(i, j) = eA(i, j);
@@ -748,16 +748,16 @@ namespace mynt {
 //        cv::Mat cvS, cvU, cvVt;
 //        cv::SVD::compute(cvH, cvS, cvU, cvVt, cv::SVD::FULL_UV); // cv::SVD::FULL_UV
 //        int j_start = cvU.cols-(jacobian_row_size-3);
-//        mynt::Matrix A(cvU.rows, jacobian_row_size - 3);
+//        cg::Matrix A(cvU.rows, jacobian_row_size - 3);
 //        for(int i=0; i<cvU.rows; ++i)
 //            for(int j=j_start; j<cvU.cols; ++j)
 //                A(i, j-j_start) = cvU.at<float>(i, j);
 
         /// Shen according OpenCV
-        mynt::Matrix U1, W1, Vt1;
-        mynt::svd_fulluv(H_fj, W1, U1, Vt1);
+        cg::Matrix U1, W1, Vt1;
+        cg::svd_fulluv(H_fj, W1, U1, Vt1);
         int j_start = U1.cols()-(jacobian_row_size-3);
-        mynt::Matrix A(U1.rows(), jacobian_row_size - 3);
+        cg::Matrix A(U1.rows(), jacobian_row_size - 3);
         for(int i=0; i<U1.rows(); ++i)
             for(int j=j_start; j<U1.cols(); ++j)
                 A(i, j-j_start) = U1(i, j);
@@ -775,7 +775,7 @@ namespace mynt {
     }
 
     // TODO
-    void MsckfVio::measurementUpdate(const mynt::Matrix &H, const mynt::VectorX &r) {
+    void MsckfVio::measurementUpdate(const cg::Matrix &H, const cg::VectorX &r) {
         if (H.rows() == 0 || r.rows() == 0)
             return;
 
@@ -820,17 +820,17 @@ namespace mynt {
             er_thin = re;
         }
 
-        mynt::Matrix H_thin(eH_thin.rows(), eH_thin.cols());
+        cg::Matrix H_thin(eH_thin.rows(), eH_thin.cols());
         for(int i=0; i<eH_thin.rows(); ++i)
             for(int j=0; j<eH_thin.cols(); ++j)
                 H_thin(i,j) = eH_thin(i,j);
-        mynt::VectorX r_thin(er_thin.size());
+        cg::VectorX r_thin(er_thin.size());
         for(int i=0; i<er_thin.size(); ++i)
             r_thin[i] = er_thin(i);
 
         // Compute the Kalman gain.
-        const mynt::Matrix &P = state_server.state_cov;
-        mynt::Matrix S = H_thin * P * H_thin.transpose() + Feature::observation_noise * mynt::Matrix::identity(H_thin.rows(), H_thin.rows());
+        const cg::Matrix &P = state_server.state_cov;
+        cg::Matrix S = H_thin * P * H_thin.transpose() + Feature::observation_noise * cg::Matrix::identity(H_thin.rows(), H_thin.rows());
         // MatrixXd K_transpose = S.fullPivHouseholderQr().solve(H_thin*P);
 
         // TODO: verify
@@ -851,16 +851,16 @@ namespace mynt {
         Eigen::MatrixXd eK = eK_transpose.transpose();
 
         // TODO
-        mynt::Matrix K(eK.rows(), eK.cols());
+        cg::Matrix K(eK.rows(), eK.cols());
         for(int i=0; i<eK.rows(); ++i)
             for(int j=0; j<eK.cols(); ++j)
                 K(i,j) = eK(i,j);
 
         // Compute the error of the state.
-        mynt::VectorX delta_x = K * r_thin;
+        cg::VectorX delta_x = K * r_thin;
 
         // Update the IMU state.
-        const mynt::VectorX &delta_x_imu = delta_x.head<21>();
+        const cg::VectorX &delta_x_imu = delta_x.head<21>();
 
         if (//delta_x_imu.segment<3>(0).norm() > 0.15 ||
             //delta_x_imu.segment<3>(3).norm() > 0.15 ||
@@ -873,43 +873,43 @@ namespace mynt {
             //return;
         }
 
-        const mynt::Quarternion dq_imu = mynt::Quarternion::small_angle_quaternion(delta_x_imu.head<3>());
+        const cg::Quarternion dq_imu = cg::Quarternion::small_angle_quaternion(delta_x_imu.head<3>());
         state_server.imu_state.orientation = dq_imu * state_server.imu_state.orientation;
         state_server.imu_state.gyro_bias += delta_x_imu.segment<3>(3);
         state_server.imu_state.velocity  += delta_x_imu.segment<3>(6);
         state_server.imu_state.acc_bias  += delta_x_imu.segment<3>(9);
         state_server.imu_state.position  += delta_x_imu.segment<3>(12);
 
-        const mynt::Quarternion dq_extrinsic = mynt::Quarternion::small_angle_quaternion(delta_x_imu.segment<3>(15));
+        const cg::Quarternion dq_extrinsic = cg::Quarternion::small_angle_quaternion(delta_x_imu.segment<3>(15));
         state_server.imu_state.R_imu_cam0 = dq_extrinsic.rotation_matrix() * state_server.imu_state.R_imu_cam0;
         state_server.imu_state.t_cam0_imu += delta_x_imu.segment<3>(18);
 
         // Update the camera states.
         auto cam_state_iter = state_server.cam_states.begin();
         for (int i = 0; i < state_server.cam_states.size(); ++i, ++cam_state_iter) {
-            const mynt::VectorX &delta_x_cam = delta_x.segment<6>(21 + i * 6);
-            const mynt::Quarternion dq_cam = mynt::Quarternion::small_angle_quaternion(delta_x_cam.head<3>());
+            const cg::VectorX &delta_x_cam = delta_x.segment<6>(21 + i * 6);
+            const cg::Quarternion dq_cam = cg::Quarternion::small_angle_quaternion(delta_x_cam.head<3>());
             cam_state_iter->second.orientation = dq_cam * cam_state_iter->second.orientation;
             cam_state_iter->second.position += delta_x_cam.tail<3>();
         }
 
         // Update state covariance.
-        mynt::Matrix I_KH = mynt::Matrix::identity(K.rows(), H_thin.cols()) - K * H_thin;
+        cg::Matrix I_KH = cg::Matrix::identity(K.rows(), H_thin.cols()) - K * H_thin;
         //state_server.state_cov = I_KH*state_server.state_cov*I_KH.transpose() +
         //  K*K.transpose()*Feature::observation_noise;
         state_server.state_cov = I_KH * state_server.state_cov;
 
         // Fix the covariance to be symmetric
-        mynt::Matrix state_cov_fixed = (state_server.state_cov + state_server.state_cov.transpose()) / 2.0;
+        cg::Matrix state_cov_fixed = (state_server.state_cov + state_server.state_cov.transpose()) / 2.0;
         state_server.state_cov = state_cov_fixed;
 
         return;
     }
 
-    bool MsckfVio::gatingTest(const mynt::Matrix &H, const mynt::VectorX &r, const int &dof) {
-        mynt::Matrix P1 = H * state_server.state_cov * H.transpose();
-        mynt::Matrix P2 = Feature::observation_noise * mynt::Matrix::eye(H.rows());
-        mynt::Matrix P = P1 + P2;
+    bool MsckfVio::gatingTest(const cg::Matrix &H, const cg::VectorX &r, const int &dof) {
+        cg::Matrix P1 = H * state_server.state_cov * H.transpose();
+        cg::Matrix P2 = Feature::observation_noise * cg::Matrix::eye(H.rows());
+        cg::Matrix P = P1 + P2;
 
         // TODO: verify
 
@@ -983,8 +983,8 @@ namespace mynt {
         // Return if there is no lost feature to be processed.
         if (processed_feature_ids.size() == 0) return;
 
-        mynt::Matrix H_x(jacobian_row_size, 21 + 6 * state_server.cam_states.size());
-        mynt::VectorX r(jacobian_row_size);
+        cg::Matrix H_x(jacobian_row_size, 21 + 6 * state_server.cam_states.size());
+        cg::VectorX r(jacobian_row_size);
         int stack_cntr = 0;
 
         // Process the features which lose track.
@@ -995,8 +995,8 @@ namespace mynt {
             for (const auto &measurement : feature.observations)
                 cam_state_ids.push_back(measurement.first);
 
-            mynt::Matrix H_xj;
-            mynt::VectorX r_j;
+            cg::Matrix H_xj;
+            cg::VectorX r_j;
             featureJacobian(feature.id, cam_state_ids, H_xj, r_j);
 
             if (gatingTest(H_xj, r_j, cam_state_ids.size() - 1)) {
@@ -1033,17 +1033,17 @@ namespace mynt {
         auto first_cam_state_iter = state_server.cam_states.begin();
 
         // Pose of the key camera state.
-        const mynt::Vector3 key_position = key_cam_state_iter->second.position;
-        const mynt::RotationMatrix key_rotation = key_cam_state_iter->second.orientation.rotation_matrix();
+        const cg::Vector3 key_position = key_cam_state_iter->second.position;
+        const cg::RotationMatrix key_rotation = key_cam_state_iter->second.orientation.rotation_matrix();
 
         // Mark the camera states to be removed based on the
         // motion between states.
         for (int i = 0; i < 2; ++i) {
-            const mynt::Vector3 position = cam_state_iter->second.position;
-            const mynt::RotationMatrix rotation = cam_state_iter->second.orientation.rotation_matrix();
+            const cg::Vector3 position = cam_state_iter->second.position;
+            const cg::RotationMatrix rotation = cam_state_iter->second.orientation.rotation_matrix();
 
             double distance = (position - key_position).l2norm();
-            mynt::RotationMatrix R = rotation * key_rotation.transpose();
+            cg::RotationMatrix R = rotation * key_rotation.transpose();
 
             // TODO [cg]
             Eigen::Matrix3d m3;
@@ -1121,8 +1121,8 @@ namespace mynt {
         //cout << "jacobian row #: " << jacobian_row_size << endl;
 
         // Compute the Jacobian and residual.
-        mynt::Matrix H_x(jacobian_row_size, 21 + 6 * state_server.cam_states.size());
-        mynt::VectorX r(jacobian_row_size);
+        cg::Matrix H_x(jacobian_row_size, 21 + 6 * state_server.cam_states.size());
+        cg::VectorX r(jacobian_row_size);
         int stack_cntr = 0;
 
         for (auto &item : map_server) {
@@ -1138,8 +1138,8 @@ namespace mynt {
             if (involved_cam_state_ids.size() == 0)
                 continue;
 
-            mynt::Matrix H_xj;
-            mynt::VectorX r_j;
+            cg::Matrix H_xj;
+            cg::VectorX r_j;
             featureJacobian(feature.id, involved_cam_state_ids, H_xj, r_j);
 
             if (gatingTest(H_xj, r_j, involved_cam_state_ids.size())) {
@@ -1219,7 +1219,7 @@ namespace mynt {
         extrinsic_rotation_cov    = cfg_msckfvio["initial_covariance/extrinsic_rotation_cov"].as<double>();
         extrinsic_translation_cov = cfg_msckfvio["initial_covariance/extrinsic_translation_cov"].as<double>();
 
-        state_server.state_cov = mynt::Matrix(21, 21);
+        state_server.state_cov = cg::Matrix(21, 21);
         for (int i = 3; i < 6; ++i)
             state_server.state_cov(i, i) = gyro_bias_cov;
         for (int i = 6; i < 9; ++i)
@@ -1239,16 +1239,16 @@ namespace mynt {
         // Convert the IMU frame to the body frame.
         const IMUState &imu_state = state_server.imu_state;
 
-        mynt::EuclideanTransform T_i_w;
+        cg::EuclideanTransform T_i_w;
         T_i_w.set_rotation_matrix(imu_state.orientation.rotation_matrix().transpose());
         T_i_w.set_translation(imu_state.position);
 
-        mynt::EuclideanTransform T_b_w = IMUState::T_imu_body * T_i_w * IMUState::T_imu_body.inv();
+        cg::EuclideanTransform T_b_w = IMUState::T_imu_body * T_i_w * IMUState::T_imu_body.inv();
 
         // Publish the odometry: T_b_w
-        mynt::RotationMatrix m3_r = T_b_w.rotation_matrix();
-        mynt::Vector3 v3_t = T_b_w.translation();
-        mynt::Quarternion q4_r = m3_r.quarternion_hamilton(); // Hamilton for draw
+        cg::RotationMatrix m3_r = T_b_w.rotation_matrix();
+        cg::Vector3 v3_t = T_b_w.translation();
+        cg::Quarternion q4_r = m3_r.quarternion_hamilton(); // Hamilton for draw
 
         path_.push_back(v3_t);
 
@@ -1260,23 +1260,23 @@ namespace mynt {
         std::cout << std::fixed << time_stamp << " " << v3_t[0] << " " << v3_t[1] << " " << v3_t[2] << std::endl;
 
         // Convert the covariance.
-        mynt::Matrix P_oo = const_cast<const mynt::Matrix&>(state_server.state_cov).block<3, 3>(0, 0);
-        mynt::Matrix P_op = const_cast<const mynt::Matrix&>(state_server.state_cov).block<3, 3>(0, 12);
-        mynt::Matrix P_po = const_cast<const mynt::Matrix&>(state_server.state_cov).block<3, 3>(12, 0);
-        mynt::Matrix P_pp = const_cast<const mynt::Matrix&>(state_server.state_cov).block<3, 3>(12, 12);
+        cg::Matrix P_oo = const_cast<const cg::Matrix&>(state_server.state_cov).block<3, 3>(0, 0);
+        cg::Matrix P_op = const_cast<const cg::Matrix&>(state_server.state_cov).block<3, 3>(0, 12);
+        cg::Matrix P_po = const_cast<const cg::Matrix&>(state_server.state_cov).block<3, 3>(12, 0);
+        cg::Matrix P_pp = const_cast<const cg::Matrix&>(state_server.state_cov).block<3, 3>(12, 12);
 
         // TODO: verify
-        mynt::Matrix P_imu_pose(6,6);
+        cg::Matrix P_imu_pose(6,6);
         P_imu_pose.set_mat(0, 0, P_pp);
         P_imu_pose.set_mat(0, 3, P_po);
         P_imu_pose.set_mat(3, 0, P_op);
         P_imu_pose.set_mat(3, 3, P_oo);
 
-        mynt::Matrix H_pose(6,6);
+        cg::Matrix H_pose(6,6);
         H_pose.set_mat(0, 0, IMUState::T_imu_body.rotation_matrix());
         H_pose.set_mat(3, 3, IMUState::T_imu_body.rotation_matrix());
 
-        mynt::Matrix P_body_pose = H_pose * P_imu_pose * H_pose.transpose();
+        cg::Matrix P_body_pose = H_pose * P_imu_pose * H_pose.transpose();
 
         std::vector<double> covariance_pose(36,0);
         for (int i = 0; i < 6; ++i)
@@ -1285,9 +1285,9 @@ namespace mynt {
 
         // Construct the covariance for the velocity.
         std::vector<double> covariance_twist(36,0);
-        mynt::Matrix P_imu_vel = const_cast<const mynt::Matrix&>(state_server.state_cov).block<3, 3>(6, 6);
-        mynt::Matrix H_vel = IMUState::T_imu_body.rotation_matrix();
-        mynt::Matrix P_body_vel = H_vel * P_imu_vel * H_vel.transpose();
+        cg::Matrix P_imu_vel = const_cast<const cg::Matrix&>(state_server.state_cov).block<3, 3>(6, 6);
+        cg::Matrix H_vel = IMUState::T_imu_body.rotation_matrix();
+        cg::Matrix P_body_vel = H_vel * P_imu_vel * H_vel.transpose();
         for (int i = 0; i < 3; ++i)
             for (int j = 0; j < 3; ++j)
                 covariance_twist[i * 6 + j] = P_body_vel(i, j);
@@ -1296,8 +1296,8 @@ namespace mynt {
         for (const auto &item : map_server) {
             const auto &feature = item.second;
             if (feature.is_initialized) {
-                mynt::Vector3 feature_position = IMUState::T_imu_body.rotation_matrix() * feature.position;
-                points3d_.push_back(mynt::Point3f(feature_position[0], feature_position[1], feature_position[2]));
+                cg::Vector3 feature_position = IMUState::T_imu_body.rotation_matrix() * feature.position;
+                points3d_.push_back(cg::Point3f(feature_position[0], feature_position[1], feature_position[2]));
             }
         }
 

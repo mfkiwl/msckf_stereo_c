@@ -2,8 +2,8 @@
 // Created by cg on 8/20/19.
 //
 
-#ifndef MSCKF_VIO_MYNT_CONFIG_IO_H
-#define MSCKF_VIO_MYNT_CONFIG_IO_H
+#ifndef MSCKF_CONFIG_IO_H
+#define MSCKF_CONFIG_IO_H
 
 #include <yaml-cpp/yaml.h>
 
@@ -13,8 +13,8 @@
 namespace YAML {
     // Vector2d
     template<>
-    struct convert<mynt::Vector2> {
-        static bool decode(const Node& node, mynt::Vector2& rhs) {
+    struct convert<cg::Vector2> {
+        static bool decode(const Node& node, cg::Vector2& rhs) {
             if(!node.IsSequence() || node.size() != 2) {
                 return false;
             }
@@ -26,8 +26,8 @@ namespace YAML {
 
     // Vector3d
     template<>
-    struct convert<mynt::Vector3> {
-        static bool decode(const Node& node, mynt::Vector3& rhs) {
+    struct convert<cg::Vector3> {
+        static bool decode(const Node& node, cg::Vector3& rhs) {
             if(!node.IsSequence() || node.size() != 3) {
                 return false;
             }
@@ -40,8 +40,8 @@ namespace YAML {
 
     // Vector4d
     template<>
-    struct convert<mynt::Vector4> {
-        static Node encode(const mynt::Vector4& rhs) {
+    struct convert<cg::Vector4> {
+        static Node encode(const cg::Vector4& rhs) {
             Node node;
             node.push_back(rhs[0]);
             node.push_back(rhs[1]);
@@ -50,7 +50,7 @@ namespace YAML {
             return node;
         }
 
-        static bool decode(const Node& node, mynt::Vector4& rhs) {
+        static bool decode(const Node& node, cg::Vector4& rhs) {
             if(!node.IsSequence() || node.size() != 4) {
                 return false;
             }
@@ -64,8 +64,8 @@ namespace YAML {
 
     // Matrix4d
     template<>
-    struct convert<mynt::Mat4> {
-        static bool decode(const Node& node, mynt::Mat4& rhs) {
+    struct convert<cg::Mat4> {
+        static bool decode(const Node& node, cg::Mat4& rhs) {
             if(!node.IsSequence() || node.size() != 16) {
                 return false;
             }
@@ -79,4 +79,4 @@ namespace YAML {
     };
 }
 
-#endif //MSCKF_VIO_MYNT_CONFIG_IO_H
+#endif //MSCKF_CONFIG_IO_H

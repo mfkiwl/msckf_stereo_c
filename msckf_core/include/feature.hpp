@@ -20,7 +20,7 @@
 #include "common/cam_state.h"
 #include "kinematics/transform.h"
 
-namespace mynt {
+namespace cg {
 
     /*
      * @brief Feature Salient part of an image. Please refer
@@ -80,8 +80,8 @@ namespace mynt {
          * @param z The ith measurement of the feature j in ci frame.
          * @return e The cost of this observation.
          */
-        inline void cost(const mynt::EuclideanTransform &T_c0_ci,
-                         const mynt::Vector3 &x, const mynt::Vector2 &z,
+        inline void cost(const cg::EuclideanTransform &T_c0_ci,
+                         const cg::Vector3 &x, const cg::Vector2 &z,
                          double &e) const;
 
         /*
@@ -93,9 +93,9 @@ namespace mynt {
          * @return r The computed residual.
          * @return w Weight induced by huber kernel.
          */
-        inline void jacobian(const mynt::EuclideanTransform &T_c0_ci,
-                             const mynt::Vector3 &x, const mynt::Vector2 &z,
-                             mynt::Matrix &J, mynt::Vector2 &r,
+        inline void jacobian(const cg::EuclideanTransform &T_c0_ci,
+                             const cg::Vector3 &x, const cg::Vector2 &z,
+                             cg::Matrix &J, cg::Vector2 &r,
                              double &w) const;
 
         /*
@@ -106,10 +106,10 @@ namespace mynt {
          * @return p: Computed feature position in c1 frame.
          */
         inline void generateInitialGuess(
-                const mynt::EuclideanTransform &T_c1_c2,
-                const mynt::Vector2 &z1,
-                const mynt::Vector2 &z2,
-                mynt::Vector3 &p);
+                const cg::EuclideanTransform &T_c1_c2,
+                const cg::Vector2 &z1,
+                const cg::Vector2 &z2,
+                cg::Vector3 &p);
 
         /*
          * @brief checkMotion Check the input camera poses to ensure
@@ -146,10 +146,10 @@ namespace mynt {
 //        std::map<StateIDType, Eigen::Vector4d, std::less<StateIDType>,
 //                Eigen::aligned_allocator<std::pair<const StateIDType, Eigen::Vector4d> > > observations;
 
-        std::map<StateIDType, mynt::Vector4, std::less<StateIDType> > observations;
+        std::map<StateIDType, cg::Vector4, std::less<StateIDType> > observations;
 
         // 3d postion of the feature in the world frame.
-        mynt::Vector3 position;
+        cg::Vector3 position;
 
         // A indicator to show if the 3d postion of the feature
         // has been initialized or not.
@@ -168,30 +168,30 @@ namespace mynt {
                     std::pair<const FeatureIDType, Feature> > > MapServer;
 
 
-    void Feature::cost(const mynt::EuclideanTransform &T_c0_ci,
-                       const mynt::Vector3 &x, const mynt::Vector2 &z,
+    void Feature::cost(const cg::EuclideanTransform &T_c0_ci,
+                       const cg::Vector3 &x, const cg::Vector2 &z,
                        double &e) const {
         // Compute hi1, hi2, and hi3 as Equation (37).
         const double &alpha = x[0];
         const double &beta  = x[1];
         const double &rho   = x[2];
 
-        mynt::Vector3 h = T_c0_ci.rotation_matrix() * mynt::Vector3({alpha, beta, 1.0}) + rho * T_c0_ci.translation();
+        cg::Vector3 h = T_c0_ci.rotation_matrix() * cg::Vector3({alpha, beta, 1.0}) + rho * T_c0_ci.translation();
         double &h1 = h[0];
         double &h2 = h[1];
         double &h3 = h[2];
 
         // Predict the feature observation in ci frame.
-        mynt::Vector2 z_hat({h1 / h3, h2 / h3});
+        cg::Vector2 z_hat({h1 / h3, h2 / h3});
 
         // Compute the residual.
-        e = mynt::Vector2(z_hat - z).squared_l2norm();
+        e = cg::Vector2(z_hat - z).squared_l2norm();
         return;
     }
 
-    void Feature::jacobian(const mynt::EuclideanTransform &T_c0_ci,
-                           const mynt::Vector3 &x, const mynt::Vector2 &z,
-                           mynt::Matrix &J, mynt::Vector2 &r,
+    void Feature::jacobian(const cg::EuclideanTransform &T_c0_ci,
+                           const cg::Vector3 &x, const cg::Vector2 &z,
+                           cg::Matrix &J, cg::Vector2 &r,
                            double &w) const {
 
         // Compute hi1, hi2, and hi3 as Equation (37).
@@ -199,7 +199,7 @@ namespace mynt {
         const double &beta  = x[1];
         const double &rho   = x[2];
 
-        mynt::Vector3 h = T_c0_ci.rotation_matrix() * mynt::Vector3({alpha, beta, 1.0}) + rho * T_c0_ci.translation();
+        cg::Vector3 h = T_c0_ci.rotation_matrix() * cg::Vector3({alpha, beta, 1.0}) + rho * T_c0_ci.translation();
         double &h1 = h[0];
         double &h2 = h[1];
         double &h3 = h[2];
@@ -207,7 +207,7 @@ namespace mynt {
         // Compute the Jacobian.
         std::vector<int> v_idx = {0,1};
 
-        mynt::Matrix W(3,3);
+        cg::Matrix W(3,3);
         W.set_mat(0, 0, T_c0_ci.rotation_matrix().extract_cols(v_idx));
         W.set_mat(0, 2, T_c0_ci.translation());
 
@@ -215,7 +215,7 @@ namespace mynt {
         J.set_mat(1, 0, 1 / h3 * W.row(1) - h2 / (h3 * h3) * W.row(2));
 
         // Compute the residual.
-        mynt::Vector2 z_hat({h1 / h3, h2 / h3});
+        cg::Vector2 z_hat({h1 / h3, h2 / h3});
         r = z_hat - z;
 
         // Compute the weight based on the residual.
@@ -229,18 +229,18 @@ namespace mynt {
     }
 
     void Feature::generateInitialGuess(
-            const mynt::EuclideanTransform &T_c1_c2,
-            const mynt::Vector2 &z1,
-            const mynt::Vector2 &z2,
-            mynt::Vector3 &p) {
+            const cg::EuclideanTransform &T_c1_c2,
+            const cg::Vector2 &z1,
+            const cg::Vector2 &z2,
+            cg::Vector3 &p) {
         // Construct a least square problem to solve the depth.
-        mynt::Vector3 m = T_c1_c2.rotation_matrix() * mynt::Vector3({z1[0], z1[1], 1.0});
+        cg::Vector3 m = T_c1_c2.rotation_matrix() * cg::Vector3({z1[0], z1[1], 1.0});
 
-        mynt::Vector2 A;
+        cg::Vector2 A;
         A[0] = m[0] - z2[0] * m[2];
         A[1] = m[1] - z2[1] * m[2];
 
-        mynt::Vector2 b;
+        cg::Vector2 b;
         b[0] = z2[0] * T_c1_c2.translation()[2] - T_c1_c2.translation()[0];
         b[1] = z2[1] * T_c1_c2.translation()[2] - T_c1_c2.translation()[1];
 
@@ -258,17 +258,17 @@ namespace mynt {
         const StateIDType &first_cam_id = observations.begin()->first;
         const StateIDType &last_cam_id = (--observations.end())->first;
 
-        mynt::EuclideanTransform first_cam_pose;
+        cg::EuclideanTransform first_cam_pose;
         first_cam_pose.set_rotation_matrix(cam_states.find(first_cam_id)->second.orientation.rotation_matrix().transpose());
         first_cam_pose.set_translation(cam_states.find(first_cam_id)->second.position);
 
-        mynt::EuclideanTransform last_cam_pose;
+        cg::EuclideanTransform last_cam_pose;
         last_cam_pose.set_rotation_matrix(cam_states.find(last_cam_id)->second.orientation.rotation_matrix().transpose());
         last_cam_pose.set_translation(cam_states.find(last_cam_id)->second.position);
 
         // Get the direction of the feature when it is first observed.
         // This direction is represented in the world frame.
-        mynt::Vector3 feature_direction({observations.begin()->second[0], observations.begin()->second[1], 1.0});
+        cg::Vector3 feature_direction({observations.begin()->second[0], observations.begin()->second[1], 1.0});
         feature_direction = feature_direction / feature_direction.l2norm();
         feature_direction = first_cam_pose.rotation_matrix() * feature_direction;
 
@@ -276,9 +276,9 @@ namespace mynt {
         // and the last frame. We assume the first frame and
         // the last frame will provide the largest motion to
         // speed up the checking process.
-        mynt::Vector3 translation = last_cam_pose.translation() - first_cam_pose.translation();
+        cg::Vector3 translation = last_cam_pose.translation() - first_cam_pose.translation();
         double parallel_translation = translation.dot(feature_direction);
-        mynt::Vector3 orthogonal_translation = translation - parallel_translation * feature_direction;
+        cg::Vector3 orthogonal_translation = translation - parallel_translation * feature_direction;
 
         if (orthogonal_translation.l2norm() > optimization_config.translation_threshold)
             return true;
@@ -292,8 +292,8 @@ namespace mynt {
 //        std::vector<Eigen::Isometry3d,Eigen::aligned_allocator<Eigen::Isometry3d> > cam_poses(0);
 //        std::vector<Eigen::Vector2d,Eigen::aligned_allocator<Eigen::Vector2d> > measurements(0);
 
-        std::vector<mynt::EuclideanTransform> cam_poses;
-        std::vector<mynt::Vector2> measurements;
+        std::vector<cg::EuclideanTransform> cam_poses;
+        std::vector<cg::Vector2> measurements;
 
         for (auto &m : observations) {
             // TODO: This should be handled properly. Normally, the
@@ -308,11 +308,11 @@ namespace mynt {
             measurements.push_back(m.second.block<2>(2));
 
             // This camera pose will take a vector from this camera frame to the world frame.
-            mynt::EuclideanTransform cam0_pose;
+            cg::EuclideanTransform cam0_pose;
             cam0_pose.set_rotation_matrix(cam_state_iter->second.orientation.rotation_matrix().transpose());
             cam0_pose.set_translation(cam_state_iter->second.position);
 
-            mynt::EuclideanTransform cam1_pose;
+            cg::EuclideanTransform cam1_pose;
             cam1_pose = cam0_pose * CAMState::T_cam0_cam1.inv();
 
             cam_poses.push_back(cam0_pose);
@@ -322,15 +322,15 @@ namespace mynt {
         // All camera poses should be modified such that it takes a
         // vector from the first camera frame in the buffer to this
         // camera frame.
-        mynt::EuclideanTransform T_c0_w = cam_poses[0];
+        cg::EuclideanTransform T_c0_w = cam_poses[0];
         for (auto &pose : cam_poses)
             pose = pose.inv() * T_c0_w;
 
         // Generate initial guess
-        mynt::Vector3 initial_position;
+        cg::Vector3 initial_position;
         generateInitialGuess(cam_poses[cam_poses.size() - 1], measurements[0], measurements[measurements.size() - 1], initial_position);
 
-        mynt::Vector3 solution(
+        cg::Vector3 solution(
                 {initial_position[0] / initial_position[2],
                  initial_position[1] / initial_position[2],
                  1.0 / initial_position[2]}
@@ -353,12 +353,12 @@ namespace mynt {
 
         // Outer loop.
         do {
-            mynt::Matrix A(3,3);
-            mynt::Vector3 b;
+            cg::Matrix A(3,3);
+            cg::Vector3 b;
 
             for (int i = 0; i < cam_poses.size(); ++i) {
-                mynt::Matrix J(2, 3);
-                mynt::Vector2 r;
+                cg::Matrix J(2, 3);
+                cg::Vector2 r;
                 double w;
 
                 jacobian(cam_poses[i], solution, measurements[i], J, r, w);
@@ -377,13 +377,13 @@ namespace mynt {
             // Solve for the delta that can reduce the total cost.
             do {
                 // TODO[cg]: verify
-                mynt::Matrix damper = lambda * mynt::Matrix::eye(3);
-//                mynt::Vector3 delta = (A + damper).ldlt().solve(b);
-                mynt::Matrix A_tmp = A + damper;
-                mynt::Matrix b_tmp = b;
+                cg::Matrix damper = lambda * cg::Matrix::eye(3);
+//                cg::Vector3 delta = (A + damper).ldlt().solve(b);
+                cg::Matrix A_tmp = A + damper;
+                cg::Matrix b_tmp = b;
 
 //                b_tmp.solve(A_tmp);
-//                mynt::Vector3 delta = b_tmp;
+//                cg::Vector3 delta = b_tmp;
 
                 Eigen::Matrix3d eA;
                 for(int i=0; i<3; ++i)
@@ -393,11 +393,11 @@ namespace mynt {
                 for(int i=0; i<3; ++i)
                     eb[i] = b[i];
                 Eigen::Vector3d e_delta = eA.ldlt().solve(eb);
-                mynt::Vector3 delta;
+                cg::Vector3 delta;
                 for(int i=0; i<3; ++i)
                     delta[i] = e_delta[i];
 
-                mynt::Vector3 new_solution = solution - delta;
+                cg::Vector3 new_solution = solution - delta;
                 delta_norm = delta.l2norm();
 
                 double new_cost = 0.0;
@@ -427,13 +427,13 @@ namespace mynt {
 
         // Covert the feature position from inverse depth
         // representation to its 3d coordinate.
-        mynt::Vector3 final_position({solution[0] / solution[2], solution[1] / solution[2], 1.0 / solution[2]});
+        cg::Vector3 final_position({solution[0] / solution[2], solution[1] / solution[2], 1.0 / solution[2]});
 
         // Check if the solution is valid. Make sure the feature
         // is in front of every camera frame observing it.
         bool is_valid_solution = true;
         for (const auto &pose : cam_poses) {
-            mynt::Vector3 position = pose.rotation_matrix() * final_position + pose.translation();
+            cg::Vector3 position = pose.rotation_matrix() * final_position + pose.translation();
             if (position[2] <= 0) {
                 is_valid_solution = false;
                 break;

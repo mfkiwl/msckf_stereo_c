@@ -19,7 +19,7 @@
 #include "cv/corner_detector.h"
 #include "kinematics/rotation_matrix.h"
 
-namespace mynt {
+namespace cg {
 
     /**
      * @brief ImageProcessor Detects and tracks features in image sequences.
@@ -46,14 +46,14 @@ namespace mynt {
         * @param cam0_img left image.
         * @param cam1_img right image.
         */
-        void stereoCallback(const mynt::Image &cam0_img, const mynt::Image &cam1_img, bool is_draw = false);
+        void stereoCallback(const cg::Image &cam0_img, const cg::Image &cam1_img, bool is_draw = false);
 
         /**
          * @brief imuCallback
          *    Callback function for the imu message.
          * @param msg IMU msg.
          */
-        void imuCallback(const mynt::ImuConstPtr &msg);
+        void imuCallback(const cg::ImuConstPtr &msg);
 
         std::shared_ptr<CameraMeasurement> feature_msg_ptr_;
 
@@ -63,10 +63,10 @@ namespace mynt {
         typedef unsigned long long int FeatureIDType;
 
         std::vector<FeatureIDType> prev_ids_;
-        std::map<FeatureIDType, mynt::Point2f> prev_cam0_points_;
-        std::map<FeatureIDType, mynt::Point2f> prev_cam1_points_;
-        std::map<FeatureIDType, mynt::Point2f> curr_cam0_points_;
-        std::map<FeatureIDType, mynt::Point2f> curr_cam1_points_;
+        std::map<FeatureIDType, cg::Point2f> prev_cam0_points_;
+        std::map<FeatureIDType, cg::Point2f> prev_cam1_points_;
+        std::map<FeatureIDType, cg::Point2f> curr_cam0_points_;
+        std::map<FeatureIDType, cg::Point2f> curr_cam1_points_;
 
         /**
          * @brief ProcessorConfig Configuration parameters for
@@ -101,8 +101,8 @@ namespace mynt {
             FeatureIDType id;
             float response;
             int lifetime;
-            mynt::Point2f cam0_point;
-            mynt::Point2f cam1_point;
+            cg::Point2f cam0_point;
+            cg::Point2f cam1_point;
         };
 
         /*
@@ -117,8 +117,8 @@ namespace mynt {
          *    Compare two keypoints based on the response.
          */
         static bool keyPointCompareByResponse(
-                const std::pair<mynt::Point2f, double> &pt1,
-                const std::pair<mynt::Point2f, double> &pt2) {
+                const std::pair<cg::Point2f, double> &pt1,
+                const std::pair<cg::Point2f, double> &pt2) {
             // Keypoint with higher response will be at the
             // beginning of the vector.
             return pt1.second > pt2.second;
@@ -205,7 +205,7 @@ namespace mynt {
          * @return cam1_R_p_c: a rotation matrix which takes a vector
          *    from previous cam1 frame to current cam1 frame.
          */
-        void integrateImuData(mynt::RotationMatrix &cam0_R_p_c, mynt::RotationMatrix &cam1_R_p_c);
+        void integrateImuData(cg::RotationMatrix &cam0_R_p_c, cg::RotationMatrix &cam1_R_p_c);
 
         /*
          * @brief predictFeatureTracking Compensates the rotation
@@ -221,10 +221,10 @@ namespace mynt {
          * Note that the input and output points are of pixel coordinates.
          */
         void predictFeatureTracking(
-                const std::vector<mynt::Point2f> &input_pts,
-                const mynt::RotationMatrix &R_p_c,
-                const mynt::Vector4 &intrinsics,
-                std::vector<mynt::Point2f> &compensated_pts);
+                const std::vector<cg::Point2f> &input_pts,
+                const cg::RotationMatrix &R_p_c,
+                const cg::Vector4 &intrinsics,
+                std::vector<cg::Point2f> &compensated_pts);
 
         /*
          * @brief twoPointRansac Applies two point ransac algorithm
@@ -241,32 +241,32 @@ namespace mynt {
          * @return inlier_flag: 1 for inliers and 0 for outliers.
          */
         void twoPointRansac(
-                const std::vector<mynt::Point2f> &pts1,
-                const std::vector<mynt::Point2f> &pts2,
-                const mynt::RotationMatrix &R_p_c,
-                const mynt::Vector4 &intrinsics,
+                const std::vector<cg::Point2f> &pts1,
+                const std::vector<cg::Point2f> &pts2,
+                const cg::RotationMatrix &R_p_c,
+                const cg::Vector4 &intrinsics,
                 const std::string &distortion_model,
-                const mynt::Vector4 &distortion_coeffs,
+                const cg::Vector4 &distortion_coeffs,
                 const double &inlier_error,
                 const double &success_probability,
                 std::vector<int> &inlier_markers);
 
         void undistortPoints(
-                const std::vector<mynt::Point2f> &pts_in,
-                const mynt::Vector4 &intrinsics,
+                const std::vector<cg::Point2f> &pts_in,
+                const cg::Vector4 &intrinsics,
                 const std::string &distortion_model,
-                const mynt::Vector4 &distortion_coeffs,
-                std::vector<mynt::Point2f> &pts_out,
-                const mynt::Mat3 &rectification_matrix = mynt::Matrix::eye(3),
-                const mynt::Vector4 &new_intrinsics = mynt::Vector4({1, 1, 0, 0}));
+                const cg::Vector4 &distortion_coeffs,
+                std::vector<cg::Point2f> &pts_out,
+                const cg::Mat3 &rectification_matrix = cg::Matrix::eye(3),
+                const cg::Vector4 &new_intrinsics = cg::Vector4({1, 1, 0, 0}));
 
-        void rescalePoints(std::vector<mynt::Point2f> &pts1, std::vector<mynt::Point2f> &pts2, float &scaling_factor);
+        void rescalePoints(std::vector<cg::Point2f> &pts1, std::vector<cg::Point2f> &pts2, float &scaling_factor);
 
-        std::vector<mynt::Point2f> distortPoints(
-                const std::vector<mynt::Point2f> &pts_in,
-                const mynt::Vector4 &intrinsics,
+        std::vector<cg::Point2f> distortPoints(
+                const std::vector<cg::Point2f> &pts_in,
+                const cg::Vector4 &intrinsics,
                 const std::string &distortion_model,
-                const mynt::Vector4 &distortion_coeffs);
+                const cg::Vector4 &distortion_coeffs);
 
         /*
          * @brief stereoMatch Matches features with stereo image pairs.
@@ -275,8 +275,8 @@ namespace mynt {
          * @return inlier_markers: 1 if the match is valid, 0 otherwise.
          */
         void stereoMatch(
-                const std::vector<mynt::Point2f> &cam0_points,
-                std::vector<mynt::Point2f> &cam1_points,
+                const std::vector<cg::Point2f> &cam0_points,
+                std::vector<cg::Point2f> &cam1_points,
                 std::vector<unsigned char> &inlier_markers);
 
         /*
@@ -318,33 +318,33 @@ namespace mynt {
         CornerDetector detector_;
 
         // IMU message buffer.
-        std::vector<mynt::Imu> imu_msg_buffer;
+        std::vector<cg::Imu> imu_msg_buffer;
 
         // Camera calibration parameters
         std::string cam0_distortion_model;
-        mynt::Vector4 cam0_intrinsics;
-        mynt::Vector4 cam0_distortion_coeffs;
+        cg::Vector4 cam0_intrinsics;
+        cg::Vector4 cam0_distortion_coeffs;
 
         std::string cam1_distortion_model;
-        mynt::Vector4 cam1_intrinsics;
-        mynt::Vector4 cam1_distortion_coeffs;
+        cg::Vector4 cam1_intrinsics;
+        cg::Vector4 cam1_distortion_coeffs;
 
         // Take a vector from cam0 frame to the IMU frame.
-        mynt::RotationMatrix R_cam0_imu;
-        mynt::Vector3 t_cam0_imu;
+        cg::RotationMatrix R_cam0_imu;
+        cg::Vector3 t_cam0_imu;
         // Take a vector from cam1 frame to the IMU frame.
-        mynt::RotationMatrix R_cam1_imu;
-        mynt::Vector3 t_cam1_imu;
+        cg::RotationMatrix R_cam1_imu;
+        cg::Vector3 t_cam1_imu;
 
         // Previous and current images
-        std::shared_ptr<mynt::Image> cam0_prev_img_ptr;
-        std::shared_ptr<mynt::Image> cam0_curr_img_ptr;
-        std::shared_ptr<mynt::Image> cam1_curr_img_ptr;
+        std::shared_ptr<cg::Image> cam0_prev_img_ptr;
+        std::shared_ptr<cg::Image> cam0_curr_img_ptr;
+        std::shared_ptr<cg::Image> cam1_curr_img_ptr;
 
         // Pyramids for previous and current image
-        std::vector<mynt::YImg8> prev_cam0_pyramid_;
-        std::vector<mynt::YImg8> curr_cam0_pyramid_;
-        std::vector<mynt::YImg8> curr_cam1_pyramid_;
+        std::vector<cg::YImg8> prev_cam0_pyramid_;
+        std::vector<cg::YImg8> curr_cam0_pyramid_;
+        std::vector<cg::YImg8> curr_cam1_pyramid_;
 
         // Features in the previous and current image.
         std::shared_ptr<GridFeatures> prev_features_ptr;
